@@ -982,7 +982,14 @@ def build_distribution_priors(param_names, dicts, device='cpu'):
             if name in split_dict:
                 evol_type = (split_dict[name][0])
                 if evol_type == "Stepwise":
-                    list_o_priors.extend([tau_prior])
+                    try:
+                        print("Checking for more prior ranges for tau...")
+                        tau_prior = BoxUniform(
+                low= torch.tensor([tau0[2]], dtype=torch.float32, device=device),
+                high=torch.tensor([tau0[3]], dtype=torch.float32, device=device)
+                    )
+                    except KeyError:
+                        list_o_priors.extend([tau_prior])
                 elif evol_type == "Linear":
                     slope0 = priors_dict[name+"_EVOL"]
                     slope0 = BoxUniform(
