@@ -988,7 +988,7 @@ def build_distribution_priors(param_names, dicts, device='cpu'):
                 low= torch.tensor([tau0[2]], dtype=torch.float32, device=device),
                 high=torch.tensor([tau0[3]], dtype=torch.float32, device=device)
                     )
-                    except KeyError:
+                    except IndexError:
                         list_o_priors.extend([tau_prior])
                 elif evol_type == "Linear":
                     slope0 = priors_dict[name+"_EVOL"]
