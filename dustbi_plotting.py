@@ -164,6 +164,8 @@ def _sbc_rank_plot(
     legend_kwargs: Optional[Dict] = None,
     ax=None,
     figsize: Optional[tuple] = None,
+    histtype: Optional[str] = 'step',
+    lw:       Optional[int] = 2
 ) -> Tuple[Figure, Axes]:
 
     # -------------------------
@@ -273,6 +275,8 @@ def _sbc_rank_plot(
                         show_ylabel=show_ylabel,
                         alpha=line_alpha,
                         xlim_offset_factor=xlim_offset_factor,
+                        histtype=histtype,
+                        lw=lw
                     )
 
                     if jj == 0:
@@ -372,6 +376,8 @@ def _plot_ranks_as_hist(
     show_ylabel: bool = False,
     num_ticks: int = 3,
     xlim_offset_factor: float = 0.1,
+    histtype: str = "step",  
+    lw=2,
 ) -> None:
     """Plot ranks as histograms on the current axis.
 
@@ -397,6 +403,8 @@ def _plot_ranks_as_hist(
         label=ranks_label,
         color=color,
         alpha=alpha,
+        histtype=histtype,
+        lw=lw,
     )
 
     if show_ylabel:
