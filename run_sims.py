@@ -95,7 +95,13 @@ if __name__ == "__main__":
     sims_savename = infos['sim_parameters']['simname']
     posterior_savename = infos['sim_parameters']['posteriorname']
 
+    try: 
+        infos['Splits']
+    except KeyError:
+        infos['Splits'] = {}
+        print("Temporarily hacking splits to be an empty dict")
     
+
     dicts = [infos['Functions'], infos['Splits'], infos['Priors'], infos['Correlations']]
 
     ##############################
