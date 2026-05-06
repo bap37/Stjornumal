@@ -85,7 +85,8 @@ def build_layout(param_names, dicts):
         except KeyError:
             AssertionError(f"I didn't understand how to parse {base}; please ensure it's parsed correctly")
 
-        if ("Gaussian" in funcname) and ("EVOL" not in funcname):
+        #Man this is getting cursed.
+        if ("Gaussian" in funcname) and ("EVOL" not in funcname) and (funcname != "DistDoubleGaussian"):
             idx["gauss"].append(i)
             order["gauss"].append(name)
 
