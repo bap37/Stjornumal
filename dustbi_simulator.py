@@ -1094,6 +1094,7 @@ def build_distribution_priors(param_names, dicts, device='cpu'):
 
 
         if func_name == "DistDoubleGaussian":
+            print("Detected a Double Gaussian.")
             mu1, sigma1, mu2, sigma2, a = priors_dict[name]
 
             mu1_prior = BoxUniform(
