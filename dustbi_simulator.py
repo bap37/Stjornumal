@@ -591,7 +591,7 @@ def unspool_labels(
 
             # ---- Mirror prior expansion exactly ----
 
-            if "Gaussian" in func_name:
+            if ("Gaussian" in func_name) and (func_name != "DistDoubleGaussian"):
                 add(func_params[:2])  # mu, sigma
 
                 if base_name in split_dict:
