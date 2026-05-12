@@ -1,7 +1,7 @@
 param_names:
     SIM_c
-    SIM_RV
     SIM_beta
+    SIM_RV
     SIM_x1
     SIM_EBV
     STEP
@@ -14,12 +14,15 @@ parameters_to_condition_on:
 sim_parameters:
     n_sim:   100_000 
     n_batch: 500
-    simname: 'posteriors/sims.v5.NOM.h5'
-    posteriorname: 'posteriors/posterior.v5.NOM.pt'
+    simname: 'simulations/sims.v5.TEST.h5'
+    posteriorname: 'posteriors/posterior.v5.TEST.pt'
 
 #Optional key; for use with run_nre.py. Otherwise leave as None
 Models_Comparison:
+#    KESTREL_MIX2.yml
+    KESTREL_BANANA.yml
     KESTREL_LOG.yml
+    SCOLNIC.yml
     KESTREL_2COLOURS.yml
 
 Data_File:
@@ -53,13 +56,13 @@ Functions:
     SIM_RV:   DistGaussian
     SIM_EBV:  DistExponential
     SIM_beta: DistGaussian
-    SIM_x1:   DistGaussian_EVOL
+    SIM_x1:   DistGaussian
 
 Splits:
     SIM_RV:  ["Stepwise","HOST_LOGMASS", 10] #A list containing the split parameter and location
     SIM_EBV: ["Stepwise","HOST_LOGMASS", 10]
     STEP:    ["Stepwise", "HOST_LOGMASS", 10]
-    SIM_x1:  ["Linear", "HOST_LOGMASS", None]
+#    SIM_x1:  ["Linear", "HOST_LOGMASS", None]
 
 #If using higher-order functions such as DistLogistic, which require two parameters
 #this dictionary tells the correlation parameter.
@@ -69,7 +72,7 @@ Correlations:
     SIM_RV:   None
     SIM_EBV:  None
     SIM_beta: None
-    SIM_x1:   HOST_LOGMASS
+    SIM_x1:   None 
 
 # We assume BoxUniform priors for our parameters; 
 # so each tuple needs to include the lower and upper bound you expect for that parameter. 
@@ -79,11 +82,11 @@ Priors:
     SIM_c:    ['(-.1, 0)', '(0.02, 0.1)']
     SIM_EBV:  ['(0.05, 0.5)']
     SIM_beta: ['(1.5,3)', '(0.05, 0.3)']
-    SIM_x1:   ['(-2,2)', '(0.2, 1)']
+    SIM_x1:   ['(-2,2)', '(0.2, 1.5)']
     SIM_x1_EVOL: ['(-0.2,0.2)']
     STEP:     ['(-0.2,0.2)']
     SCATTER:  ['(0,0.1)']
-    SIM_RV:   ['(1.5,4)', '(0.5,2)']
+    SIM_RV:   ['(1.5,6)', '(0.2,1.2)']
 #    SIM_RV:   ['(1,3)','(-1.5, 2.1)', '(0,.5)'] #L, k, sigma
 
 
