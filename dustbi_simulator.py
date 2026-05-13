@@ -226,7 +226,7 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
 
     if "STEP" in param_names:
     #Calculate indices for things that need the "mass" step added to them. 
-        steps_to_add = ['MURES']
+        steps_to_add = ['MURES', 'mB']
         step_indices = torch.tensor(
             [parameters_to_condition_on.index(c) for c in steps_to_add],
             dtype=torch.long,
