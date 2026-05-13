@@ -4,8 +4,6 @@ param_names:
     SIM_beta
     SIM_x1
     SIM_EBV
-    SCATTER
-
 
 parameters_to_condition_on:
     ['c', 'mB', 'x1', 'zHD', 'cERR', 'mBERR', 'x1ERR', 'MU', 'HOST_LOGMASS', 'MURES']
@@ -13,14 +11,13 @@ parameters_to_condition_on:
 sim_parameters:
     n_sim:   100_000 
     n_batch: 500
-    simname: 'simulations/sims.v5.2COL.h5'
-    posteriorname: 'posteriors/posterior.v5.2COL.pt'
+    simname: 'simulations/sims.v5.BAN.h5'
+    posteriorname: 'posteriors/posterior.v5.BAN.pt'
 
 #Optional key; for use with run_nre.py. Otherwise leave as None
 Models_Comparison:
-    SCOLNIC.yml
-#    KESTREL_LOG.yml
-#    KESTREL_2COLOURS.yml
+    KESTREL_LOG.yml
+    KESTREL_2COLOURS.yml
 
 Data_File:
     "DES5YR.FITRES.gz"
@@ -28,21 +25,20 @@ Simbank_File:
     "SIMBANK_THIRD.FITRES"
 
 
-#Population_B:
-#    Priors:
-#      SIM_c:       [“(-.1, 0)“, “(0.02, 0.1)“]
-#      SIM_RV:      [“(1.5,4)“, “(0.5,2)“]
-#      SIM_beta:    [“(1,2)“, “(0.05, 0.3)“]
-#      SIM_x1:      [“(-2,2)“, “(0.2, 1)“]
-#      SIM_x1_EVOL: [“(-1,1)“]
-#      SIM_EBV:     [“(0.05, 0.5)“]
-#      STEP:        [“(-0.2,0.2)“]
-#      SCATTER:     [“(0,0.1)“]
+Population_B:
+    Priors:
+      SIM_c:       ['(-.1, 0.1)', '(0.02, 0.1)']
+      SIM_RV:      ['(1.5,5)', '(0.5,1.5)']
+      SIM_beta:    ['(1.5,3)', '(0.05, 0.3)']
+      SIM_x1:      ['(-2,0)', '(0.2, 1.2)']
+      SIM_EBV:     ['(0.05, .3)','(1,7)']
+      STEP:        ['(-0.2,0.2)']
+      SCATTER:     ['(0,0.1)']
 #    # Parameters listed here share a single value across both populations
 #    # (pop B uses pop A's value). Any param not listed gets independent pop B values
 #    # drawn from the Priors above. Omit or leave empty for fully-split mixture.
-#    shared_params: [SIM_beta]
-#    mixing_prior:   “(0, 1)”
+    #shared_params: [SIM_beta]
+    mixing_prior:   '(0, 1)'
 
 #########################
 # Dictionaries 
@@ -55,12 +51,6 @@ Functions:
     SIM_beta: DistGaussian
     SIM_x1:   DistGaussian
 
-Splits:
-    SIM_beta:  ["Stepwise","HOST_LOGMASS", 10] #A list containing the split parameter and location
-    SIM_c: ["Stepwise","HOST_LOGMASS", 10]
-#    STEP:    ["Stepwise", "HOST_LOGMASS", 10]
-#    SIM_x1:  ["Linear", "HOST_LOGMASS", None]
-
 #If using higher-order functions such as DistLogistic, which require two parameters
 #this dictionary tells the correlation parameter.
 #ONLY works when/if calling 2-parameter functions. 
@@ -69,22 +59,20 @@ Correlations:
     SIM_RV:   None
     SIM_EBV:  None
     SIM_beta: None
-    SIM_x1:   None 
+    SIM_x1:   None
 
 # We assume BoxUniform priors for our parameters; 
 # so each tuple needs to include the lower and upper bound you expect for that parameter. 
 # Gaussians are formatted as mu then sigma
 
 Priors:
-    SIM_c:    ['(-.1, .1)', '(0.02, 0.1)']
-    SIM_EBV:  ['(0.05, 0.5)']
-    SIM_beta: ['(1.5,3)', '(0.05, 0.3)']
-    SIM_x1:   ['(-2,2)', '(0.2, 1.5)']
-    SIM_x1_EVOL: ['(-0.2,0.2)']
-    STEP:     ['(-0.2,0.2)']
-    SCATTER:  ['(0,0.1)']
-    SIM_RV:   ['(1.5,4)', '(0.2,1.5)']
-#    SIM_RV:   ['(1,3)','(-1.5, 2.1)', '(0,.5)'] #L, k, sigma
+    SIM_c:       ['(-.1, 0.1)', '(0.02, 0.1)']
+    SIM_RV:      ['(1.5,5)', '(0.5,1.5)']
+    SIM_beta:    ['(1.5,3)', '(0.05, 0.3)']
+    SIM_x1:      ['(0,2)', '(0.2, 1.2)']
+    SIM_EBV:     ['(0.05, .3)','(1,7)']
+    STEP:        ['(-0.2,0.2)']
+    SCATTER:     ['(0,0.1)']
 
 
 
@@ -101,3 +89,4 @@ Latex_Names:
     STEP:              '$\gamma$'
     SCATTER:           '$\sigma_{int}$'
     DistLogistic:      ['$L$', '$k$', '$\sigma$']
+    DistGamma:         ['$\tau$', '$\gamma$']
