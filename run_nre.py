@@ -94,14 +94,6 @@ def train_classifier(net, x_train, y_train, x_val, y_val,
     return net, best_val_loss
 
 
-def add_distance(df_tensor):
-    x1_obs = df_tensor['x1'] ; c_obs = df_tensor['c'] ; mB_obs = df_tensor['mB']
-    beta = 3.1 ; alpha = 0.16 ; M0 = -19.3
-    correction = alpha * x1_obs - beta * c_obs + M0 + mB_obs
-    MURES = df_tensor['MU'] - correction
-    return MURES
-
-
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--CONFIG", help="Configuration yaml for NRE model comparison.", type=str)
