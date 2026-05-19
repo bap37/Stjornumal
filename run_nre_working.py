@@ -232,6 +232,15 @@ if __name__ == "__main__":
         print(f"{'='*60}")
 
         comp_infos = load_kestrel(model_path)
+
+
+        try: 
+            comp_infos['Splits']
+        except KeyError:
+            comp_infos['Splits'] = {}
+            print("Temporarily hacking splits to be an empty dict")
+        
+
         dicts_2 = [comp_infos['Functions'], comp_infos['Splits'],
                     comp_infos['Priors'], comp_infos['Correlations']]
         param_names_2 = comp_infos['param_names']
