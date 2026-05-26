@@ -345,6 +345,7 @@ if __name__ == "__main__":
             with torch.no_grad():
                 logit = net(x_obs_norm_dev).squeeze() / T
             log10_bfs.append(-logit.item() / math.log(10))
+            print("log10(BF) =", -logit.item() / math.log(10))
             val_accs.append(val_acc)
             val_losses.append(val_loss)
             temperatures.append(T)
