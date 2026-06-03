@@ -86,13 +86,21 @@ def load_truth(genpdf_file):
 
 def load_just_data(datfilename, desired_evt, parameters_to_condition_on):
 
-    from astropy.cosmology import Planck18
+    from astropy.cosmology import wCDM
     import numpy as np
     import pandas as pd
    
     dfdata = pd.read_csv(datfilename, 
                              comment="#", sep=r'\s+')
-    dfdata['MU'] = Planck18.distmod(dfdata.zHD.values).value
+
+    cosmo = wCDM(
+        H0=67.66,        # Hubble constant (km/s/Mpc)
+        Om0=0.31,      # Omega matter
+        Ode0=1-.31,     # Omega dark energy
+        w0=-1       # your chosen w value
+    )
+
+    dfdata['MU'] = cosmo.distmod(dfdata.zHD.values).value
 
     dfdata = dfdata.loc[dfdata.HOST_LOGMASS > 0]
 
@@ -173,6 +181,7 @@ def run_sbc(SIMS, GENPDFS, posterior, Nsamples=5000, timeout=60, parameters_to_c
         n = min(samples_np.shape[1], len(truths_np))
 
         valid_mask = ~np.isnan(samples_np[:, :n])
+
 
         # convert to float so we can assign NaN
         rank_values = (samples_np[:, :n] < truths_np[:n]).sum(axis=0).astype(float)

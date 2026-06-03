@@ -4,6 +4,8 @@ param_names:
     SIM_beta
     SIM_x1
     SIM_EBV
+    STEP
+    SCATTER
 
 parameters_to_condition_on:
     ['c', 'mB', 'x1', 'zHD', 'cERR', 'mBERR', 'x1ERR', 'MU', 'HOST_LOGMASS', 'MURES']
@@ -37,7 +39,7 @@ Population_B:
 #    # Parameters listed here share a single value across both populations
 #    # (pop B uses pop A's value). Any param not listed gets independent pop B values
 #    # drawn from the Priors above. Omit or leave empty for fully-split mixture.
-    #shared_params: [SIM_beta]
+    shared_params: [SIM_beta]
     mixing_prior:   '(0, 1)'
 
 #########################
@@ -60,6 +62,9 @@ Correlations:
     SIM_EBV:  None
     SIM_beta: None
     SIM_x1:   None
+
+Splits:
+    STEP:    ["Stepwise", "HOST_LOGMASS", 10]
 
 # We assume BoxUniform priors for our parameters; 
 # so each tuple needs to include the lower and upper bound you expect for that parameter. 
