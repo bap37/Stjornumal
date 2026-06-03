@@ -818,7 +818,7 @@ def load_data(simfilename, datfilename):
     dfdata['MU'] = Planck18.distmod(dfdata.zHD.values).value
 
     print("Only loading DES Data")
-    dfdata = dfdata.loc[dfdata.IDSURVEY == 10]
+    #dfdata = dfdata.loc[dfdata.IDSURVEY == 10]
     #dfdata.loc[dfdata.PROB_SNNV19 < -1., "PROB_SNNV19"] = 1
     try:
         dfdata = dfdata.loc[dfdata.PROB_SNNV19 >= 0.5]

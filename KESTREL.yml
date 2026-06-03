@@ -14,12 +14,11 @@ parameters_to_condition_on:
 sim_parameters:
     n_sim:   100_000 
     n_batch: 500
-    simname: 'simulations/sims.v5.TEST.h5'
-    posteriorname: 'posteriors/posterior.v5.TEST.pt'
+    simname: 'simulations/sims.v5.NOM.h5'
+    posteriorname: 'posteriors/posterior.v5.NOM.pt'
 
 #Optional key; for use with run_nre.py. Otherwise leave as None
 Models_Comparison:
-#    KESTREL_MIX2.yml
     KESTREL_BANANA.yml
     KESTREL_LOG.yml
     SCOLNIC.yml
@@ -28,7 +27,7 @@ Models_Comparison:
 Data_File:
     "DES5YR.FITRES.gz"
 Simbank_File:
-    "SIMBANK_THIRD.FITRES"
+    "SIMBANK_BIG.FITRES.gz"
 
 
 #Population_B:
