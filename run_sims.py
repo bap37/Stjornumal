@@ -75,8 +75,16 @@ if __name__ == "__main__":
 
     args = get_args()
 
+    if args.BIRD:
+        with open("config_files/Hliðarfjall.txt", "rb") as f:
+            for line in f:
+                print(line)
+        quit()
+
     if not args.CONFIG:
         print("No configuration file provided via --CONFIG. Quitting.")
+        quit()
+        
 
     infos = load_kestrel(args.CONFIG)
 
@@ -156,9 +164,7 @@ if __name__ == "__main__":
         device=device,
     )
 
-    if args.BIRD:
-        print("I'm very sorry but the kestrel hasn't taken flight yet!")
-        quit()
+
 
     #A quick hack to avoid the painful loading of a bunch of unnecessary features...
     if args.SIMULATE:
