@@ -18,7 +18,6 @@ Model comparison between two configurations is supported via Neural Ratio Estima
 ```
 config_files/          Stjörnumál YAML configuration files
 data_files/            Observed data (FITRES format)
-sim_bank/              Pre-simulated SN Ia bank (FITRES format)
 posteriors/            Output: trained posteriors (.pt)
 
 ```
@@ -26,7 +25,7 @@ posteriors/            Output: trained posteriors (.pt)
 ## Installation
 
 ```bash
-pip install -e .
+git clone https://github.com/bap37/Stjornumal.git
 ```
 
 ## Running the pipeline
@@ -36,7 +35,7 @@ All scripts are run from the repo root and take a `--CONFIG` argument pointing t
 ### 1. Generate training simulations
 
 ```bash
-python scripts/run_sims.py --CONFIG config_files/Stjörnumál.yml --SIMULATE
+python scripts/run_sims.py --CONFIG config_files/STJARNA.yml --SIMULATE
 ```
 
 Importance-resamples the simulation bank for each prior draw and streams `(theta, x)` pairs to the HDF5 file specified by `simname` in the config. Also writes a surviving-priors diagnostic PDF.
@@ -44,7 +43,7 @@ Importance-resamples the simulation bank for each prior draw and streams `(theta
 ### 2. Train the network
 
 ```bash
-python scripts/run_sims.py --CONFIG config_files/Stjörnumál.yml --TRAIN
+python scripts/run_sims.py --CONFIG config_files/STJARNA.yml --TRAIN
 ```
 
 Reads the HDF5 file in chunks and trains an NSF density estimator with `PopulationEmbeddingFull`. Saves the posterior as a pickle (`.pt`) after each chunk and writes a loss curve PDF.
@@ -52,7 +51,7 @@ Reads the HDF5 file in chunks and trains an NSF density estimator with `Populati
 ### 3. Model comparison (NRE)
 
 ```bash
-python scripts/run_nre.py --CONFIG config_files/Stjörnumál.yml
+python scripts/run_nre.py --CONFIG config_files/STJARNA.yml
 ```
 
 Compares the nominal model against each config listed under `Models_Comparison` in the YAML. Trains a binary classifier and reports log₁₀(BF) on the Jeffreys scale.
@@ -107,4 +106,4 @@ Input files are gzip-compressed SNANA FITRES files. The simulation bank requires
 
 ## Dependencies
 
-Managed via `pyproject.toml`. Key packages: `torch>=2.5.1`, `sbi>=0.25.0`, `astropy>=7.2.0`, `numpy`, `scipy`, `matplotlib`, `pandas`, `h5py`, `tqdm`.
+Key packages: `torch>=2.5.1`, `sbi>=0.25.0`, `astropy>=7.2.0`, `numpy`, `scipy`, `matplotlib`, `pandas`, `h5py`, `tqdm`.
