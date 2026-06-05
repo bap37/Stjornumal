@@ -19,10 +19,12 @@ sim_parameters:
 
 #Optional key; for use with run_nre.py. Otherwise leave as None
 Models_Comparison:
-    KESTREL_BANANA.yml
-    KESTREL_LOG.yml
-    SCOLNIC.yml
-    KESTREL_2COLOURS.yml
+    STJARNA_SINGLE_RV.yml
+    STJARNA_NO_STEP.yml
+    STJARNA_BANANA.yml
+    STJARNA_LESS_BANANA.yml
+    STJARNA_LOG.yml
+    STJARNA_2COLOURS.yml
 
 Data_File:
     "DES5YR.FITRES.gz"
@@ -61,7 +63,6 @@ Splits:
     SIM_RV:  ["Stepwise","HOST_LOGMASS", 10] #A list containing the split parameter and location
     SIM_EBV: ["Stepwise","HOST_LOGMASS", 10]
     STEP:    ["Stepwise", "HOST_LOGMASS", 10]
-#    SIM_x1:  ["Linear", "HOST_LOGMASS", None]
 
 #If using higher-order functions such as DistLogistic, which require two parameters
 #this dictionary tells the correlation parameter.

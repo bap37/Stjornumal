@@ -19,12 +19,8 @@ sim_parameters:
 
 #Optional key; for use with run_nre.py. Otherwise leave as None
 Models_Comparison:
-#    KESTREL_BANANA.yml
-#    KESTREL_LOG.yml
-#    SCOLNIC.yml
-    KESTREL_2COLOURS.yml
-    KESTREL_LESS_BANANA.yml
-    KESTREL_NO_STEP.yml
+    STJARNA.yml
+
 
 Data_File:
     "DES5YR.FITRES.gz"
