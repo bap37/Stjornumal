@@ -428,7 +428,7 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
                 gamma = theta[:, temp_index].unsqueeze(1)   
                 y = result[:, :, y_idx]  
                 step = torch.where(y < step_threshold, -gamma/2, gamma/2)  # (B, n_target)
-                result[:, :, step_indices] += step.unsqueeze(-1)
+                result[:, :, step_indices]+= step.unsqueeze(-1)
 
 
         #Then if grey scatter is enabled, add it to this nonsense.            
