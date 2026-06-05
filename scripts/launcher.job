@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH --time=05:00:00
+#SBATCH --nodes=1
+#SBATCH --gpus=1
+#SBATCH --constraint=gpu
+#SBATCH --account=m1727_g
+#SBATCH --job-name=kestrel
+#SBATCH -c 64
+#SBATCH -q regular
+#SBATCH --output=NOMINAL.LOG
+
+conda init
+conda activate SBI
+
+python run_sims.py --CONFIG STJARNA.yml --SIMULATE
+python run_sims.py --CONFIG STJARNA.yml --TRAIN
