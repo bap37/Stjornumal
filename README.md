@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="Stjornumal.png" width="400" alt="Stjörnumál"/><br>
-  <em>Common Kestrel (Falco tinnunculus) — <a href="https://commons.wikimedia.org/wiki/File:Common-Kestrel-4.jpg">Wikimedia Commons</a>, CC BY-SA 2.5</em>
+  <em>A common environment.</em>
 </p>
 
 Simulation-Based Inference (SBI) framework for inferring Type Ia supernova dust population parameters from photometric survey data. Stjörnumál uses importance-resampling from a pre-existing simulation bank to train a Neural Posterior Estimator (NPE) on the population-level parameters governing the SN Ia colour, stretch, and dust distributions.
