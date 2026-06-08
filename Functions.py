@@ -1,5 +1,6 @@
 import torch
 import math
+import numpy as np
 
 ##############
 # torch-compatible functions live in this code block; must start with "Dist"
@@ -344,3 +345,13 @@ def DistDelta(theta):
     batch_size = theta.shape[0]
 
     return 
+
+
+#########################
+# Skysurvey related functions live here, denoted with "SKY" preceding the model .
+########################
+
+def SKYexponential(xx, tau):
+    if type(xx) is str: # assumed r_ input
+            xx = eval(f"np.r_[{xx}]")
+    return xx, np.heaviside(xx, 0)*np.exp(-xx/tau)/tau
