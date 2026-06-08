@@ -22,11 +22,16 @@ from dustbi_simulator import load_kestrel
 #############################################
 
 def draw_model_param_stjarna(Priors):
-    print(Priors)
-    mu_c = np.random.uniform(low=-.1, high=0, size=1)
-    sig_c = np.random.uniform(low=0.02, high=0.1, size=1)
-    mu_x1 = np.random.uniform(low=-2, high=2, size=1)
-    sig_x1 = np.random.uniform(low=0.2, high=1.5, size=1)
+    """
+    Invoking bespoke priors as part of the first pass.
+    """
+    #First the c block
+    mu0, sigma0 = priors_dict['SIM_c']
+    mu_c = np.random.uniform(low=mu0[0], high=mu0[1], size=1)
+    sig_c = np.random.uniform(low=sigma0[0], high=sigma0[1], size=1)
+    mu0, sigma0 = priors_dict['SIM_x1']
+    mu_x1 = np.random.uniform(low=mu0[0], high=mu0[1], size=1)
+    sig_x1 = np.random.uniform(low=sigma0[0], high=sigma0[1], size=1)
     beta = np.random.uniform(low=1, high=4, size=1)
     mu_rv = np.random.uniform(low=1.5, high=6, size=1)
     sig_rv = np.random.uniform(low=0.2, high=1.2, size=1)
