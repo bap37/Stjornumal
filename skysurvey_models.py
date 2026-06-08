@@ -33,9 +33,9 @@ def draw_model_param_stjarna():
     return (mu_c, sig_c, mu_x1, sig_x1, beta, mu_rv, sig_rv, tau, scatter)
 
 
-def initialise_model_stjarna(sncosmo_model):
+def initialise_model_stjarna(sncosmo_model, theta):
 
-    (mu_c, sig_c, mu_x1, sig_x1, beta, mu_rv, sig_rv, tau, scatter) = draw_model_param_stjarna()
+    (mu_c, sig_c, mu_x1, sig_x1, beta, mu_rv, sig_rv, tau, scatter) = theta
     
     SNeIa = dict( redshift = {"kwargs": {"zmax":0.2}, "as":"z"},
                            
@@ -84,7 +84,7 @@ def initialise_model_stjarna(sncosmo_model):
     #snia.add_effect(mw_dust)
     snia.add_effect(host_dust)
 
-    return snia
+    return snia 
 
 #############################################
 # Next model and so on ... 

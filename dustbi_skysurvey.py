@@ -1,20 +1,13 @@
 import numpy as np
 import pandas as pd 
 from astropy.cosmology import Planck18
-import scipy
 import matplotlib.pyplot as plt
 import skysurvey
-import astropy
-import healpy as hp
-from astropy.coordinates import SkyCoord
-import astropy.units as u
-import yaml
 import sncosmo
 from scipy.special import expit
 import multiprocessing as mp
-from Functions import SKYexponential
 
-from skysurvey_models import draw_model_param_stjarna, initialise_model_stjarna
+from skysurvey_models import initialise_model_stjarna, draw_model_param_stjarna
 
 def initialise_ztf():
     """
@@ -22,7 +15,7 @@ def initialise_ztf():
     """
     sncosmo_model = sncosmo.Model(source=sncosmo.get_source('salt3'))
 
-    logs = pd.read_parquet("logs/ztf_logs_coadded.parquet")
+    logs = pd.read_parquet("skysurvey/logs/ztf_logs_coadded.parquet")
     logs.rename(columns={'mjd_round': 'mjd'}, inplace=True)
     logs = logs[logs['mjd'] < 59304]
     ztf = skysurvey.ZTF.from_pointings(data=logs)
@@ -37,8 +30,7 @@ def initialise_ztf():
 
     return ztf, sncosmo_model
 
-
-def run_ztf(snia, ztf, i,):
+def run_ztf(snia, ztf, theta):
     snia_data = snia.draw(zmin=0.01, 
                           zmax=0.3, 
                           tstart=min(ztf.data['mjd'])-20, 
@@ -61,23 +53,32 @@ def run_ztf(snia, ztf, i,):
     snid = np.unique(dset_data['sn'])
     snia_data = snia_data[snia_data['sn'].isin(snid)]
     print("Brodie note that we're temporarily saving to a random place! ")
-    snia_data.to_parquet('simulations/snias_'+str(i)+'.parquet') #truth values
-    dset_data.to_parquet('simulations/dset_'+str(i)+'.parquet') #light curves 
+    #snia_data.to_parquet('simulations/snias_'+str(i)+'.parquet') #truth values
+    #dset_data.to_parquet('simulations/dset_'+str(i)+'.parquet') #light curves 
 
     # Here run the SALT fits and save them
     #Future carveout to fit stuff 
 
-    return np.array([i, mu_c, sig_c, mu_x1, sig_x1, beta, mu_rv, sig_rv, tau, scatter])
+    return np.array(theta)
 
 
-def run_ztf_worker(i):
-    ztf, sncosmo_model = initialise_ztf()
-    snia = initialise_model_stjarna(sncosmo_model)
-    return run_ztf(snia, ztf, i)
 
+#Model chooser should read something from STJARNA.yml and return the appropriate model 
+def model_chooser(infos, sncosmo_model):
+    if infos['Skysurvey'] == 'Stjarna':
+        theta = draw_model_param_stjarna()
+        snia = initialise_model_stjarna(sncosmo_model, theta)
+    else: 
+        print(f"I did not recognise {infos['Skysurvey']}; it is not implemented ")
+        quit()
+
+    return snia,theta
 
 if __name__ == '__main__':
 
+    from dustbi_simulator import load_kestrel
+    infos = load_kestrel('config_files/STJARNA.yml')
 
-    with mp.Pool(50) as pool:
-        results = pool.map(run_ztf_worker, range(10))
+    ztf, sncosmo_model = initialise_ztf()
+    snia,theta = model_chooser(infos, sncosmo_model=sncosmo_model)
+    run_ztf(snia, ztf, theta=theta)
