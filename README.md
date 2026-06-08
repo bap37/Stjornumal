@@ -1,7 +1,7 @@
 # Stjörnumál
 
 <p align="center">
-  <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Common-Kestrel-4.jpg" width="400" alt="Common Kestrel (Falco tinnunculus)"/><br>
+  <img src="Stjornumal.png" width="400" alt="Stjörnumál"/><br>
   <em>Common Kestrel (Falco tinnunculus) — <a href="https://commons.wikimedia.org/wiki/File:Common-Kestrel-4.jpg">Wikimedia Commons</a>, CC BY-SA 2.5</em>
 </p>
 
