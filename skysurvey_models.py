@@ -15,12 +15,14 @@ from scipy.special import expit
 import multiprocessing as mp
 from Functions import SKYexponential
 
+from dustbi_simulator import load_kestrel
 
 #############################################
 # Nominal model from Stjornumal 
 #############################################
 
-def draw_model_param_stjarna():
+def draw_model_param_stjarna(Priors):
+    print(Priors)
     mu_c = np.random.uniform(low=-.1, high=0, size=1)
     sig_c = np.random.uniform(low=0.02, high=0.1, size=1)
     mu_x1 = np.random.uniform(low=-2, high=2, size=1)

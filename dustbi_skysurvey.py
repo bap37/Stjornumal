@@ -66,7 +66,8 @@ def run_ztf(snia, ztf, theta):
 #Model chooser should read something from STJARNA.yml and return the appropriate model 
 def model_chooser(infos, sncosmo_model):
     if infos['Skysurvey'] == 'Stjarna':
-        theta = draw_model_param_stjarna()
+        theta = draw_model_param_stjarna(infos['Priors'])
+        quit()
         snia = initialise_model_stjarna(sncosmo_model, theta)
     else: 
         print(f"I did not recognise {infos['Skysurvey']}; it is not implemented ")
