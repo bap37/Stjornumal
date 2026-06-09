@@ -1,9 +1,9 @@
 param_names:
     SIM_c
-    SIM_beta
     SIM_RV
     SIM_x1
     SIM_EBV
+    STEP
     SCATTER
 
 
@@ -13,19 +13,22 @@ parameters_to_condition_on:
 sim_parameters:
     n_sim:   100_000 
     n_batch: 500
-    simname: 'simulations/sims.v5.NOS.h5'
-    posteriorname: 'posteriors/posterior.v5.NOS.pt'
+    simname: 'simulations/sims.v5.ZBE.h5'
+    posteriorname: 'posteriors/posterior.v5.ZBE.pt'
 
 #Optional key; for use with run_nre.py. Otherwise leave as None
 Models_Comparison:
-    STJARNA.yml
-
+    STJARNA_SINGLE_RV.yml
+    STJARNA_NO_STEP.yml
+    STJARNA_BANANA.yml
+    STJARNA_LESS_BANANA.yml
+    STJARNA_LOG.yml
+    STJARNA_2COLOURS.yml
 
 Data_File:
     "DES5YR.FITRES.gz"
 Simbank_File:
-    "SIMBANK_THIRD.FITRES"
-
+    "SIMBANK-ZERO.FITRES.gz"
 
 #########################
 # Dictionaries 
@@ -42,7 +45,6 @@ Splits:
     SIM_RV:  ["Stepwise","HOST_LOGMASS", 10] #A list containing the split parameter and location
     SIM_EBV: ["Stepwise","HOST_LOGMASS", 10]
     STEP:    ["Stepwise", "HOST_LOGMASS", 10]
-#    SIM_x1:  ["Linear", "HOST_LOGMASS", None]
 
 #If using higher-order functions such as DistLogistic, which require two parameters
 #this dictionary tells the correlation parameter.
