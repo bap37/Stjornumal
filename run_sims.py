@@ -166,41 +166,54 @@ if __name__ == "__main__":
 
 
 
-    #A quick hack to avoid the painful loading of a bunch of unnecessary features...
+    #A quick check to see which type of simulation we are requesting. 
     if args.SIMULATE:
-        df, dfdata = load_data(simfilename, datfilename)
 
-        print("Adding 'broad' MURES now. ")
-    
-        output_distribution = preprocess_input_distribution(
-            df, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
+        if infos['Skysurvey']:
+            print("Brodie note to load in the data later, will be necessary.")
+            print("Detected a request to use Skysurvey! Switching over; please note that we are disabling a lot of features in the yml now!")
+            is_skysurvey = True
+            
+        else:
+            df, dfdata = load_data(simfilename, datfilename)
 
-        MURES_SIMS = add_distance(output_distribution)
-        df['MURES'] = MURES_SIMS
+            print("Adding 'broad' MURES now. ")
+        
+            output_distribution = preprocess_input_distribution(
+                df, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
 
-        output_distribution = preprocess_input_distribution(
-            dfdata, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
+            MURES_SIMS = add_distance(output_distribution)
+            df['MURES'] = MURES_SIMS
 
-        MURES_DATA = add_distance(output_distribution)
-        dfdata['MURES'] = MURES_DATA
+            output_distribution = preprocess_input_distribution(
+                dfdata, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
 
-        print("We are temporarily not standardising data.")
-        #df, dfdata = standardise_data(df, dfdata, parameters_to_condition_on)
+            MURES_DATA = add_distance(output_distribution)
+            dfdata['MURES'] = MURES_DATA
+
+            print("We are temporarily not standardising data.")
+            #df, dfdata = standardise_data(df, dfdata, parameters_to_condition_on)
 
 
-        sim_for_training = make_batched_simulator(layout, df,
-                                param_names,parameters_to_condition_on,
-                                dicts, dfdata, device=device, mixture=mixture,
-                                split_positions=split_positions)
-        batched = True
+            sim_for_training = make_batched_simulator(layout, df,
+                                    param_names,parameters_to_condition_on,
+                                    dicts, dfdata, device=device, mixture=mixture,
+                                    split_positions=split_positions)
+            batched = True
 
     if args.SIMULATE:
-        print(f"Training {n_sim} simulations and saving to {sims_savename}")
-        theta, priors = simulate_model(n_sim, n_batch, sims_savename, priors, sim_for_training, inference, device=device, batched=batched)
-        shutil.copy(args.CONFIG, posterior_savename.replace(".pt", ".yml.bk")).replace("posterior", "sims")
-        plot_surviving_priors(theta,priors,labels,sims_savename.replace("h5","survivng_priors.pdf"))
-        print("Quitting after simulation stage.")
-        quit()
+        if is_skysurvey:
+            from dustbi_skysurvey import *
+            ztf, sncosmo_model = initialise_ztf()
+            snia,theta = model_chooser(infos, sncosmo_model=sncosmo_model)
+            run_ztf(snia, ztf, theta=theta)
+        else:
+            print(f"Training {n_sim} simulations and saving to {sims_savename}")
+            theta, priors = simulate_model(n_sim, n_batch, sims_savename, priors, sim_for_training, inference, device=device, batched=batched)
+            shutil.copy(args.CONFIG, posterior_savename.replace(".pt", ".yml.bk")).replace("posterior", "sims")
+            plot_surviving_priors(theta,priors,labels,sims_savename.replace("h5","survivng_priors.pdf"))
+            print("Quitting after simulation stage.")
+            quit()
     ################
     if args.TRAIN:
     ################

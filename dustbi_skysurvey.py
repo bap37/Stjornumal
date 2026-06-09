@@ -7,15 +7,13 @@ import sncosmo
 from scipy.special import expit
 import multiprocessing as mp
 
-from skysurvey_models import initialise_model_stjarna, draw_model_param_stjarna
-
 def initialise_ztf():
     """
     Initialisation of ZTF-specific components in skysurvey.
     """
     sncosmo_model = sncosmo.Model(source=sncosmo.get_source('salt3'))
 
-    logs = pd.read_parquet("skysurvey/logs/ztf_logs_coadded.parquet")
+    logs = pd.read_parquet("Skys/logs/ztf_logs_coadded.parquet")
     logs.rename(columns={'mjd_round': 'mjd'}, inplace=True)
     logs = logs[logs['mjd'] < 59304]
     ztf = skysurvey.ZTF.from_pointings(data=logs)
@@ -66,8 +64,8 @@ def run_ztf(snia, ztf, theta):
 #Model chooser should read something from STJARNA.yml and return the appropriate model 
 def model_chooser(infos, sncosmo_model):
     if infos['Skysurvey'] == 'Stjarna':
+        from Skys.models.model_STJARNA import initialise_model_stjarna, draw_model_param_stjarna
         theta = draw_model_param_stjarna(infos['Priors'])
-        quit()
         snia = initialise_model_stjarna(sncosmo_model, theta)
     else: 
         print(f"I did not recognise {infos['Skysurvey']}; it is not implemented ")
