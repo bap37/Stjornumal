@@ -89,6 +89,7 @@ def initialise_model_stjarna(sncosmo_model, theta):
                               'hostr_v': {"func": scipy.stats.norm.rvs, "kwargs": {"loc":mu_rv, "scale":sig_rv}}}}
     snia = skysurvey.SNeIa()
     snia.set_model(SNeIa)
+    snia.set_rate(23500.0*2) # Fudging the rate so that we get enough SNe
     snia.set_template(sncosmo_model)
     #snia.set_cosmology(cosmo) Will need to come back for this later ... 
     #snia.add_effect(mw_dust)
