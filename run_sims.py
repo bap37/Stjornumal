@@ -191,10 +191,6 @@ if __name__ == "__main__":
             MURES_DATA = add_distance(output_distribution)
             dfdata['MURES'] = MURES_DATA
 
-            print("We are temporarily not standardising data.")
-            #df, dfdata = standardise_data(df, dfdata, parameters_to_condition_on)
-
-
             sim_for_training = make_batched_simulator(layout, df,
                                     param_names,parameters_to_condition_on,
                                     dicts, dfdata, device=device, mixture=mixture,
@@ -205,15 +201,23 @@ if __name__ == "__main__":
         if is_skysurvey:
             from dustbi_skysurvey import *
             ztf, sncosmo_model = initialise_ztf()
-            snia,theta = model_chooser(infos, sncosmo_model=sncosmo_model)
-            run_ztf(snia, ztf, theta=theta)
+            model_initialiser, theta_generator = model_chooser(infos)
+
+            #theta = theta_generator(infos['Priors'])
+            #snia = model_initialiser(sncosmo_model, theta)
+            #snia_data, dset_data  = run_ztf(snia, ztf)
+
+            #Need to implement a checker to see if we're on a batch queue or running locally. 
+            simulate_model_lightcurves_skysurvey(infos, run_ztf, theta_generator, model_initialiser, sncosmo_model, ztf, device="cpu") #add dfdata
+
         else:
-            print(f"Training {n_sim} simulations and saving to {sims_savename}")
+            print(f"Generating {n_sim} simulations and saving to {sims_savename}")
             theta, priors = simulate_model(n_sim, n_batch, sims_savename, priors, sim_for_training, inference, device=device, batched=batched)
             shutil.copy(args.CONFIG, posterior_savename.replace(".pt", ".yml.bk")).replace("posterior", "sims")
             plot_surviving_priors(theta,priors,labels,sims_savename.replace("h5","survivng_priors.pdf"))
             print("Quitting after simulation stage.")
             quit()
+
     ################
     if args.TRAIN:
     ################

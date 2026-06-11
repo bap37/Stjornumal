@@ -5,7 +5,78 @@ import matplotlib.pyplot as plt
 import skysurvey
 import sncosmo
 from scipy.special import expit
-import multiprocessing as mp
+from pathos.multiprocessing import ProcessingPool as Pool
+from pathlib import Path
+
+
+
+################################
+# The model_chooser
+################################
+
+def model_chooser(infos):
+    """
+    The beating heart of the skysurvey integration. After building your desired model in Skys/models/ (see model_STJARNA.py for an example), add it here.
+    Should 
+
+    """
+    if infos['Skysurvey'] == 'Stjarna':
+        from Skys.models.model_STJARNA import initialise_model_stjarna, draw_model_param_stjarna
+    #Import other models here
+    else: 
+        print(f"I did not recognise {infos['Skysurvey']}; it is not implemented ")
+        quit()
+
+    return initialise_model_stjarna, draw_model_param_stjarna
+
+
+################################
+# Skysurvey Simulation Code
+################################
+
+
+def simulate_model_lightcurves_skysurvey(infos, simulator, theta_generator, model_initialiser, sncosmo_model, survey_information, device="cpu"):
+
+    from tqdm import tqdm
+
+    n_sim = infos['sim_parameters']['n_sim']
+    n_batch = infos['sim_parameters']['n_batch']
+    sims_savename = infos['sim_parameters']['simname']
+
+    #come back to this... 
+    print(sims_savename.split("/")[0])
+    outdir = Path(sims_savename.split("/")[0]+"/TMP")
+    outdir.mkdir(exist_ok=True)
+
+    def run_single_sim(i):
+
+        theta = theta_generator(infos["Priors"])
+        snia = model_initialiser(sncosmo_model, theta)
+
+        simulator(
+            snia,
+            survey_information,
+            sim_id=i,
+            savename=sims_savename
+        )
+
+        return i
+
+    with Pool(processes=n_batch) as pool:
+
+        results = list(
+            tqdm(
+                pool.uimap(run_single_sim, range(n_sim)),
+                total=n_sim,
+            )
+        )
+                # - END UPDATES
+
+    return 
+
+####################################
+# Initialisation functions for ZTF in skysurvey
+####################################
 
 def initialise_ztf():
     """
@@ -28,7 +99,9 @@ def initialise_ztf():
 
     return ztf, sncosmo_model
 
-def run_ztf(snia, ztf, theta):
+
+#Will eventually need to update this to be more general and not just ztf-specific... 
+def run_ztf(snia, ztf, sim_id=None, savename=None):
     snia_data = snia.draw(zmin=0.01, 
                           zmax=0.3, 
                           tstart=min(ztf.data['mjd'])-20, 
@@ -50,34 +123,17 @@ def run_ztf(snia, ztf, theta):
     
     snid = np.unique(dset_data['sn'])
     snia_data = snia_data[snia_data['sn'].isin(snid)]
-    print("Brodie note that we're temporarily saving to a random place! ")
-    #snia_data.to_parquet('simulations/snias_'+str(i)+'.parquet') #truth values
-    #dset_data.to_parquet('simulations/dset_'+str(i)+'.parquet') #light curves 
+
+    #    simname: 'simulations/sims.v5.NOM.h5'
+    snia_data.to_parquet(
+         f"{savename.split('/')[0]}/TMP/{sim_id:06d}_truth.parquet"
+    )
+
+    dset_data.to_parquet(
+        f"{savename.split('/')[0]}/TMP/{sim_id:06d}_lightcurves.parquet"
+    )
 
     # Here run the SALT fits and save them
     #Future carveout to fit stuff 
 
-    return np.array(theta)
-
-
-
-#Model chooser should read something from STJARNA.yml and return the appropriate model 
-def model_chooser(infos, sncosmo_model):
-    if infos['Skysurvey'] == 'Stjarna':
-        from Skys.models.model_STJARNA import initialise_model_stjarna, draw_model_param_stjarna
-        theta = draw_model_param_stjarna(infos['Priors'])
-        snia = initialise_model_stjarna(sncosmo_model, theta)
-    else: 
-        print(f"I did not recognise {infos['Skysurvey']}; it is not implemented ")
-        quit()
-
-    return snia,theta
-
-if __name__ == '__main__':
-
-    from dustbi_simulator import load_kestrel
-    infos = load_kestrel('config_files/STJARNA.yml')
-
-    ztf, sncosmo_model = initialise_ztf()
-    snia,theta = model_chooser(infos, sncosmo_model=sncosmo_model)
-    run_ztf(snia, ztf, theta=theta)
+    return snia_data, dset_data
