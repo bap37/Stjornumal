@@ -185,10 +185,10 @@ def run_ztf(snia, ztf, sim_id=None, savename=None):
                                                 'cov_c_t0', 'cov_c_x0', 'cov_c_x1', 'cov_c_c',
                                                 'chisq', 'ndof'])
 
-    df_salt['t0_err'] = np.sqrt(df_salt_2['cov_t0_t0'])
-    df_salt['x0_err'] = np.sqrt(df_salt_2['cov_x0_x0'])
-    df_salt['x1_err'] = np.sqrt(df_salt_2['cov_x1_x1'])
-    df_salt['c_err'] = np.sqrt(df_salt_2['cov_c_c'])
+    df_salt['t0_err'] = np.sqrt(df_salt['cov_t0_t0'])
+    df_salt['x0_err'] = np.sqrt(df_salt['cov_x0_x0'])
+    df_salt['x1_err'] = np.sqrt(df_salt['cov_x1_x1'])
+    df_salt['c_err'] = np.sqrt(df_salt['cov_c_c'])
     df_salt['sn'] = list(targets_to_consider)
     df_salt['fitprob'] = stats.chi2.sf(df_salt['chisq'], df_salt['ndof'])
 
