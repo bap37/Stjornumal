@@ -200,14 +200,14 @@ if __name__ == "__main__":
     if args.SIMULATE:
         if is_skysurvey:
             from dustbi_skysurvey import *
-            ztf, sncosmo_model = initialise_ztf()
+            ztf = initialise_ztf()
             model_initialiser, theta_generator = model_chooser(infos)
 
             #Need to implement a checker to see if we're on a batch queue or running locally. 
 
             print("Milky Way Reddening is not yet enabled!")
             print(f"Generating {n_sim} simulations and saving the raw LCs to a temporary directory.")
-            tmp_outdir = simulate_model_lightcurves_skysurvey(infos, run_ztf, theta_generator, model_initialiser, sncosmo_model, ztf, device="cpu") #add dfdata
+            tmp_outdir = simulate_model_lightcurves_skysurvey(infos, run_ztf, theta_generator, model_initialiser, ztf, device="cpu") #add dfdata
             print("Finished generating raw LCs and truth values!")
             import glob
             tmp_files = glob.glob(f"{tmp_outdir}/*_truth.parquet")
