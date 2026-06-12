@@ -35,7 +35,7 @@ def model_chooser(infos):
 ################################
 
 
-def simulate_model_lightcurves_skysurvey(infos, simulator, theta_generator, model_initialiser, sncosmo_model, survey_information, device="cpu"):
+def simulate_model_lightcurves_skysurvey(infos, simulator, theta_generator, model_initialiser, survey_information, device="cpu"):
 
     from tqdm import tqdm
 
@@ -59,7 +59,7 @@ def simulate_model_lightcurves_skysurvey(infos, simulator, theta_generator, mode
     def run_single_sim(i):
 
         theta = theta_generator(infos["Priors"])
-        snia = model_initialiser(sncosmo_model, theta)
+        snia = model_initialiser(theta)
 
         simulator(
             snia,
@@ -108,8 +108,10 @@ def initialise_ztf():
     """
     Initialisation of ZTF-specific components in skysurvey.
     """
-    sncosmo_model = sncosmo.Model(source=sncosmo.get_source('salt3'))
-
+    
+    import dustmaps.planck
+    dustmaps.planck.fetch()
+    
     logs = pd.read_parquet("Skys/logs/ztf_logs_coadded.parquet")
     logs.rename(columns={'mjd_round': 'mjd'}, inplace=True)
     logs = logs[logs['mjd'] < 59304]
@@ -123,7 +125,7 @@ def initialise_ztf():
     skynoise = pd.concat([s.get_group(f_)*coefs[f_] for f_ in coefs.keys()])
     ztf.data["skynoise"] = skynoise
 
-    return ztf, sncosmo_model
+    return ztf
 
 
 #Will eventually need to update this to be more general and not just ztf-specific... 

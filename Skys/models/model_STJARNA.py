@@ -43,7 +43,7 @@ def draw_model_param_stjarna(priors_dict):
     return (mu_c, sig_c, mu_x1, sig_x1, beta, mu_rv, sig_rv, tau, scatter)
 
 
-def initialise_model_stjarna(sncosmo_model, theta):
+def initialise_model_stjarna(theta):
 
     (mu_c, sig_c, mu_x1, sig_x1, beta, mu_rv, sig_rv, tau, scatter) = theta
     
@@ -76,12 +76,6 @@ def initialise_model_stjarna(sncosmo_model, theta):
                                 "kwargs": {},
                                 "as": ["ra","dec"]})
     
-    #mw_dust = {'effect': sncosmo.models.F99Dust(r_v=3.1),
-    #                 'name': 'mw',
-    #                 'frame': 'obs',
-    #                 'model': {'mwebv': {'func': skysurvey.effects.milkyway.get_mwebv,
-    #                     'kwargs': {'ra': '@ra', 'dec': '@dec', 'which':'sfd'}}}}
-    
     host_dust = {'effect': sncosmo.models.F99Dust(),
                      'name': 'host',
                      'frame': 'rest',
@@ -90,9 +84,9 @@ def initialise_model_stjarna(sncosmo_model, theta):
     snia = skysurvey.SNeIa()
     snia.set_model(SNeIa)
     snia.set_rate(23500.0*2) # Fudging the rate so that we get enough SNe
-    snia.set_template(sncosmo_model)
+    snia.set_template(sncosmo.Model(source=sncosmo.get_source('salt3')))
     #snia.set_cosmology(cosmo) Will need to come back for this later ... 
-    #snia.add_effect(mw_dust)
+    snia.add_effect(skysurvey.effects.mw_extinction)
     snia.add_effect(host_dust)
 
     return snia 
