@@ -74,6 +74,15 @@ def simulate_model_lightcurves_skysurvey(infos, simulator, theta_generator, mode
 
     return 
 
+def fit_model_lightcurves_skysurvey(infos, simulator, theta_generator, model_initialiser, sncosmo_model, survey_information, device="cpu"):
+
+    #print(sims_savename.split("/")[0])
+    #outdir = Path(sims_savename.split("/")[0]+"/TMP")
+    #outdir.rmdir(exist_ok=True)
+
+
+    return "bloop"
+
 ####################################
 # Initialisation functions for ZTF in skysurvey
 ####################################

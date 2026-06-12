@@ -37,9 +37,6 @@ Simbank_File:
 #########################
 
 #Override feature to force use of skysurvey. Disables Functions, Splits, Correlations, and currently Priors as well 
-Skysurvey:
-   Stjarna
-
 
 #########################
 # Dictionaries 
