@@ -203,12 +203,18 @@ if __name__ == "__main__":
             ztf, sncosmo_model = initialise_ztf()
             model_initialiser, theta_generator = model_chooser(infos)
 
-            #theta = theta_generator(infos['Priors'])
-            #snia = model_initialiser(sncosmo_model, theta)
-            #snia_data, dset_data  = run_ztf(snia, ztf)
-
             #Need to implement a checker to see if we're on a batch queue or running locally. 
-            simulate_model_lightcurves_skysurvey(infos, run_ztf, theta_generator, model_initialiser, sncosmo_model, ztf, device="cpu") #add dfdata
+
+            print("Milky Way Reddening is not yet enabled!")
+            print(f"Generating {n_sim} simulations and saving the raw LCs to a temporary directory.")
+            tmp_outdir = simulate_model_lightcurves_skysurvey(infos, run_ztf, theta_generator, model_initialiser, sncosmo_model, ztf, device="cpu") #add dfdata
+            print("Finished generating raw LCs and truth values!")
+            import glob
+            tmp_files = glob.glob(f"{tmp_outdir}/*_truth.parquet")
+            print("Gathering list of files to fit with SALT.")
+            fit_model_lightcurves_skysurvey(tmp_files)
+            print("Done fitting SALT!")
+            #Then gather them all into a single h5 file, eventually... 
 
         else:
             print(f"Generating {n_sim} simulations and saving to {sims_savename}")

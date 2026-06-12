@@ -12,7 +12,7 @@ parameters_to_condition_on:
     ['c', 'mB', 'x1', 'zHD', 'cERR', 'mBERR', 'x1ERR', 'MU', 'HOST_LOGMASS', 'MURES']
 
 sim_parameters:
-    n_sim:   40 
+    n_sim:   10
     n_batch: 5
     simname: 'simulations/sims.v5.NOM.h5'
     posteriorname: 'posteriors/posterior.v5.NOM.pt'

@@ -7,8 +7,8 @@ import sncosmo
 from scipy.special import expit
 from pathos.multiprocessing import ProcessingPool as Pool
 from pathlib import Path
-
-
+import scipy
+import os
 
 ################################
 # The model_chooser
@@ -44,8 +44,16 @@ def simulate_model_lightcurves_skysurvey(infos, simulator, theta_generator, mode
     sims_savename = infos['sim_parameters']['simname']
 
     #come back to this... 
+
+
+
     print(sims_savename.split("/")[0])
     outdir = Path(sims_savename.split("/")[0]+"/TMP")
+
+    if outdir.exists():
+        import shutil
+        shutil.rmtree(outdir)
+        print("Found an existing TMP directory; removing it...")
     outdir.mkdir(exist_ok=True)
 
     def run_single_sim(i):
@@ -72,16 +80,25 @@ def simulate_model_lightcurves_skysurvey(infos, simulator, theta_generator, mode
         )
                 # - END UPDATES
 
-    return 
+    return outdir
 
-def fit_model_lightcurves_skysurvey(infos, simulator, theta_generator, model_initialiser, sncosmo_model, survey_information, device="cpu"):
+def run_single_fit(filename):
+    fit_lc_with_salt(filename)
+    return filename
 
-    #print(sims_savename.split("/")[0])
-    #outdir = Path(sims_savename.split("/")[0]+"/TMP")
-    #outdir.rmdir(exist_ok=True)
+def fit_model_lightcurves_skysurvey(list_of_truth_names):
 
+    from tqdm import tqdm
 
-    return "bloop"
+    with Pool(processes=os.cpu_count()) as pool:
+        results = list(
+            tqdm(
+                pool.uimap(run_single_fit, list_of_truth_names),
+                total=len(list_of_truth_names),
+            )
+        )
+    return results
+
 
 ####################################
 # Initialisation functions for ZTF in skysurvey
@@ -142,9 +159,39 @@ def run_ztf(snia, ztf, sim_id=None, savename=None):
         f"{savename.split('/')[0]}/TMP/{sim_id:06d}_lightcurves.parquet"
     )
     
+    return snia_data, dset_data
+
+
+def fit_salt(lc, z_guess, t0_guess, mwebv_guess):
+    model = sncosmo.Model(source=sncosmo.get_source('salt3'), effects=[sncosmo.F99Dust(r_v=3.1)], effect_names=['mw'], effect_frames=['obs'])
+    model.set(z=z_guess, t0=t0_guess, mwebv=mwebv_guess)
+    keymap={}
+    lc_dict = {key: lc[keymap.get(key, key)].values for key in ["time", "band", "flux", "fluxerr","zp", "zpsys"]}
+    try:
+        result, fitted_model = sncosmo.fit_lc(
+        lc_dict, model,
+        ['t0', 'x0', 'x1', 'c'],  # parameters of model to vary
+        bounds={'x1':(-10, 10), 'c':(-1, 3)}, modelcov=True)  # bounds on parameters (if any)
+    except RuntimeError :
+        return np.ones(24)*np.nan
+    if result['success'] == False:
+        return np.ones(24)*np.nan
+    return np.concatenate([result['parameters'], result['covariance'].flatten(), np.array([result['chisq'], result['ndof']])])
+
+
+def fit_lc_with_salt(filename):
+
+    #always pass truth name in 
+
+    LCname = filename.replace("truth", "lightcurves")
+
+    #"000000_truth.parquet"
+    #"000000_lightcurves.parquet"
+
+
     # Selection on the light curves
-    lcs = dset_data.copy()
-    snias = snia_data.copy()
+    lcs = pd.read_parquet(LCname)
+    snias = pd.read_parquet(filename)
 
     lcs.reset_index(inplace=True)
     snias.reset_index(inplace=True)
@@ -183,11 +230,13 @@ def run_ztf(snia, ztf, sim_id=None, savename=None):
         sn_name = targets_to_consider[i]
         lc = lcs[lcs.index == targets_to_consider[i]]
         sn = snias_new[snias_new['sn'] == targets_to_consider[i]]
-        df_result = fit_salt_integrated(lc, z_guess=sn['z'].iloc[0], t0_guess=sn['t0'].iloc[0]+norm.rvs(0, 2), mwebv_guess=sn['mwebv'].iloc[0])
+        sn['mwebv'] = [0]
+        df_result = fit_salt(lc, z_guess=sn['z'].iloc[0], t0_guess=sn['t0'].iloc[0]+scipy.stats.norm.rvs(0, 2), mwebv_guess=sn['mwebv'].iloc[0])
         salt_fits.append(np.array(df_result))
+    
     salt_fits = np.array(salt_fits)
 
-    df_salt = pandas.DataFrame(salt_fits, columns=['z', 't0', 'x0', 'x1', 'c', 'mwebv',
+    df_salt = pd.DataFrame(salt_fits, columns=['z', 't0', 'x0', 'x1', 'c', 'mwebv',
                                                  'cov_t0_t0', 'cov_t0_x0', 'cov_t0_x1', 'cov_t0_c',
                                                 'cov_x0_t0', 'cov_x0_x0', 'cov_x0_x1', 'cov_x0_c',
                                                 'cov_x1_t0', 'cov_x1_x0', 'cov_x1_x1', 'cov_x1_c',
@@ -199,7 +248,7 @@ def run_ztf(snia, ztf, sim_id=None, savename=None):
     df_salt['x1_err'] = np.sqrt(df_salt['cov_x1_x1'])
     df_salt['c_err'] = np.sqrt(df_salt['cov_c_c'])
     df_salt['sn'] = list(targets_to_consider)
-    df_salt['fitprob'] = stats.chi2.sf(df_salt['chisq'], df_salt['ndof'])
+    df_salt['fitprob'] = scipy.stats.chi2.sf(df_salt['chisq'], df_salt['ndof'])
 
     # Select on SALT
     
@@ -210,26 +259,19 @@ def run_ztf(snia, ztf, sim_id=None, savename=None):
 
     # Save the SALT fits
     
+    #print(df_salt_selected)
+    
+    #filename stuff now ... "simulations/TMP/000000_truth.parquet"
+    sim_id = filename.split("/")[-1].split("_")[0]
+
     df_salt_selected.to_parquet(
-        f"{savename.split('/')[0]}/TMP/{sim_id:06d}_salt_fits.parquet"
+        f"{filename.replace('truth','LCFIT')}"
     )
+    
+    os.remove(filename)
+    os.remove(LCname)
+
     #Future carveout to fit stuff 
 
-    return snia_data, dset_data, df_salt_selected
-
-
-def fit_salt(lc, z_guess, t0_guess, mwebv_guess):
-    model = sncosmo.Model(source=sncosmo.get_source('salt3'), effects=[sncosmo.F99Dust(r_v=3.1)], effect_names=['mw'], effect_frames=['obs'])
-    model.set(z=z_guess, t0=t0_guess, mwebv=mwebv_guess)
-    keymap={}
-    lc_dict = {key: lc[keymap.get(key, key)].values for key in ["time", "band", "flux", "fluxerr","zp", "zpsys"]}
-    try:
-        result, fitted_model = sncosmo.fit_lc(
-        lc_dict, model,
-        ['t0', 'x0', 'x1', 'c'],  # parameters of model to vary
-        bounds={'x1':(-10, 10), 'c':(-1, 3)}, modelcov=True)  # bounds on parameters (if any)
-    except RuntimeError :
-        return np.ones(24)*np.nan
-    if result['success'] == False:
-        return np.ones(24)*np.nan
-    return np.concatenate([result['parameters'], result['covariance'].flatten(), np.array([result['chisq'], result['ndof']])])
+if __name__ == "__main__":
+    fit_lc_with_salt("simulations/TMP/000000_truth.parquet")
