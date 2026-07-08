@@ -205,14 +205,16 @@ if __name__ == "__main__":
 
             #Need to implement a checker to see if we're on a batch queue or running locally. 
 
-            print(f"Generating {n_sim} simulations and saving the raw LCs to a temporary directory.")
-            tmp_outdir = simulate_model_lightcurves_skysurvey(infos, run_ztf, theta_generator, model_initialiser, ztf, device="cpu") #add dfdata
-            print("Finished generating raw LCs and truth values!")
-            import glob
-            tmp_files = glob.glob(f"{tmp_outdir}/*_truth.parquet")
-            print("Gathering list of files to fit with SALT.")
-            fit_model_lightcurves_skysurvey(tmp_files)
-            print("Done fitting SALT!")
+            #print(f"Generating {n_sim} simulations and saving the raw LCs to a temporary directory.")
+            #tmp_outdir = simulate_model_lightcurves_skysurvey(infos, run_ztf, theta_generator, model_initialiser, ztf, device="cpu") #add dfdata
+            #print("Finished generating raw LCs and truth values!")
+            #import glob
+            #tmp_files = glob.glob(f"{tmp_outdir}/*_truth.parquet")
+            #print("Gathering list of files to fit with SALT.")
+            #fit_model_lightcurves_skysurvey(tmp_files)
+            #print("Done fitting SALT!")
+            tmp_outdir = "simulations/TMP/"
+            combine_to_h5(f"{tmp_outdir}", sims_savename)
             #Then gather them all into a single h5 file, eventually... 
 
         else:

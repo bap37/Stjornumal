@@ -276,7 +276,7 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
 
             for i in range(layout.counts[dist]):
                 name = layout.order[dist][i]
-
+                #print(name, theta_dist)
                 if "_EVOL" in name:
                     name = name.split("_EVOL_")[0]
 

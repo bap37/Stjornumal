@@ -59,6 +59,7 @@ def simulate_model_lightcurves_skysurvey(infos, simulator, theta_generator, mode
     def run_single_sim(i):
 
         theta = theta_generator(infos["Priors"])
+        np.save(f"{sims_savename.split('/')[0]}/TMP/{i:06d}_THETA.npy", theta) #wow that's ugly... 
         snia = model_initialiser(theta)
 
         simulator(
@@ -260,10 +261,6 @@ def fit_lc_with_salt(filename):
     df_salt_selected = df_salt[mask_c & mask_x1 & mask_fit]
 
     # Save the SALT fits
-    
-    #print(df_salt_selected)
-    
-    #filename stuff now ... "simulations/TMP/000000_truth.parquet"
     sim_id = filename.split("/")[-1].split("_")[0]
 
     df_salt_selected.to_parquet(
@@ -273,7 +270,76 @@ def fit_lc_with_salt(filename):
     os.remove(filename)
     os.remove(LCname)
 
-    #Future carveout to fit stuff 
 
-if __name__ == "__main__":
-    fit_lc_with_salt("simulations/TMP/000000_truth.parquet")
+
+def parquet_to_numpy(parquet_file):
+    df = pd.read_parquet(parquet_file)
+    df = df.drop(columns=["sn"]) #Not needed; also need to convert names... 
+    return df.to_numpy(dtype=np.float32)
+
+
+def combine_to_h5(input_dir, output_h5):
+
+    from pathlib import Path
+    import numpy as np
+    import pandas as pd
+    import h5py
+    from tqdm import tqdm
+
+
+    input_dir = Path(input_dir)
+
+    theta_files = sorted(input_dir.glob("*_THETA.npy"))
+
+    with h5py.File(output_h5, "w") as f:
+
+        theta_ds = None
+        x_ds = None
+        cursor = 0
+
+        for theta_file in tqdm(theta_files):
+
+            sim_id = theta_file.stem.split("_")[0]
+            lc_file = input_dir / f"{sim_id}_LCFIT.parquet"
+
+            if not lc_file.exists():
+                print(f"Skipping {sim_id}: missing LCFIT file.")
+                continue
+
+            theta = np.load(theta_file).astype(np.float32)
+            x = parquet_to_numpy(lc_file)
+
+            # Ensure leading batch dimension
+            if theta.ndim == 1:
+                theta = theta[None, ...]
+
+            if x.ndim == len(x.shape):
+                x = x[None, ...]
+
+            if theta_ds is None:
+
+                theta_ds = f.create_dataset(
+                    "theta",
+                    shape=(0, *theta.shape[1:]),
+                    maxshape=(None, *theta.shape[1:]),
+                    dtype="float32",
+                    chunks=True,
+                )
+
+                x_ds = f.create_dataset(
+                    "x",
+                    shape=(0, *x.shape[1:]),
+                    maxshape=(None, *x.shape[1:]),
+                    dtype="float32",
+                    chunks=True,
+                )
+
+            n = theta.shape[0]
+
+            theta_ds.resize(cursor + n, axis=0)
+            x_ds.resize(cursor + n, axis=0)
+
+            theta_ds[cursor:cursor + n] = theta
+            x_ds[cursor:cursor + n] = x
+
+            cursor += n
