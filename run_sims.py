@@ -173,6 +173,7 @@ if __name__ == "__main__":
             print("Brodie note to load in the data later, will be necessary.")
             print("Detected a request to use Skysurvey! Switching over; please note that we are disabling a lot of features in the yml now!")
             is_skysurvey = True
+            df, dfdata = load_data(simfilename, datfilename)
             
         else:
             df, dfdata = load_data(simfilename, datfilename)
@@ -214,7 +215,7 @@ if __name__ == "__main__":
             #fit_model_lightcurves_skysurvey(tmp_files)
             #print("Done fitting SALT!")
             tmp_outdir = "simulations/TMP/"
-            combine_to_h5(f"{tmp_outdir}", sims_savename)
+            combine_to_h5(f"{tmp_outdir}", sims_savename, dfdata, parameters_to_condition_on)
             #Then gather them all into a single h5 file, eventually... 
 
         else:

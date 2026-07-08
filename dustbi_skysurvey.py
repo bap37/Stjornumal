@@ -183,6 +183,8 @@ def fit_salt(lc, z_guess, t0_guess, mwebv_guess):
 
 
 def fit_lc_with_salt(filename):
+    from astropy.cosmology import Planck18
+
 
     #always pass truth name in 
 
@@ -253,6 +255,13 @@ def fit_lc_with_salt(filename):
     df_salt['sn'] = list(targets_to_consider)
     df_salt['fitprob'] = scipy.stats.chi2.sf(df_salt['chisq'], df_salt['ndof'])
 
+    #CHECK 
+    #Need to check if beta = 3.1 is appropriate, also check if M0 is necessary ! 
+    df_salt['MU'] = Planck18.distmod(df_salt.zHD.values).value
+    alpha = 0.14 ; beta = 3.1 
+    MURES = df_salt['mB'] - beta*df_salt['c'] + alpha*df_salt['x1'] 
+    df_salt['MURES'] =  MURES - df_salt['MU']
+
     # Select on SALT
     
     mask_c = df_salt['c'].between(-0.2, 0.8) & (df_salt['cERR'] < 0.1)
@@ -277,8 +286,7 @@ def parquet_to_numpy(parquet_file, dfdata, parameters_to_condition_on):
     df = df.drop(columns=["sn"]) #Not needed; also need to convert names... 
     df = df.sample(n=len(dfdata), random_state=1812)
 
-    #rename columns;
-    #keep only the parameters to condition on 
+    df = df[parameters_to_condition_on]
 
     return df.to_numpy(dtype=np.float32)
 
