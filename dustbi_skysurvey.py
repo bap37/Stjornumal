@@ -239,7 +239,7 @@ def fit_lc_with_salt(filename):
     
     salt_fits = np.array(salt_fits)
 
-    df_salt = pd.DataFrame(salt_fits, columns=['z', 't0', 'x0', 'x1', 'c', 'mwebv',
+    df_salt = pd.DataFrame(salt_fits, columns=['zHD', 't0', 'x0', 'x1', 'c', 'mwebv',
                                                  'cov_t0_t0', 'cov_t0_x0', 'cov_t0_x1', 'cov_t0_c',
                                                 'cov_x0_t0', 'cov_x0_x0', 'cov_x0_x1', 'cov_x0_c',
                                                 'cov_x1_t0', 'cov_x1_x0', 'cov_x1_x1', 'cov_x1_c',
@@ -248,15 +248,15 @@ def fit_lc_with_salt(filename):
 
     df_salt['t0_err'] = np.sqrt(df_salt['cov_t0_t0'])
     df_salt['x0_err'] = np.sqrt(df_salt['cov_x0_x0'])
-    df_salt['x1_err'] = np.sqrt(df_salt['cov_x1_x1'])
-    df_salt['c_err'] = np.sqrt(df_salt['cov_c_c'])
+    df_salt['x1ERR'] = np.sqrt(df_salt['cov_x1_x1'])
+    df_salt['cERR'] = np.sqrt(df_salt['cov_c_c'])
     df_salt['sn'] = list(targets_to_consider)
     df_salt['fitprob'] = scipy.stats.chi2.sf(df_salt['chisq'], df_salt['ndof'])
 
     # Select on SALT
     
-    mask_c = df_salt['c'].between(-0.2, 0.8) & (df_salt['c_err'] < 0.1)
-    mask_x1 = df_salt['x1'].between(-3, 3) &  (df_salt['x1_err'] < 1)
+    mask_c = df_salt['c'].between(-0.2, 0.8) & (df_salt['cERR'] < 0.1)
+    mask_x1 = df_salt['x1'].between(-3, 3) &  (df_salt['x1ERR'] < 1)
     mask_fit = (df_salt['t0_err'] < 2) & (df_salt['fitprob'] > 0.05)
     df_salt_selected = df_salt[mask_c & mask_x1 & mask_fit]
 
@@ -272,13 +272,18 @@ def fit_lc_with_salt(filename):
 
 
 
-def parquet_to_numpy(parquet_file):
+def parquet_to_numpy(parquet_file, dfdata, parameters_to_condition_on):
     df = pd.read_parquet(parquet_file)
     df = df.drop(columns=["sn"]) #Not needed; also need to convert names... 
+    df = df.sample(n=len(dfdata), random_state=1812)
+
+    #rename columns;
+    #keep only the parameters to condition on 
+
     return df.to_numpy(dtype=np.float32)
 
 
-def combine_to_h5(input_dir, output_h5):
+def combine_to_h5(input_dir, output_h5, dfdata, parameters_to_condition_on):
 
     from pathlib import Path
     import numpy as np
@@ -307,7 +312,7 @@ def combine_to_h5(input_dir, output_h5):
                 continue
 
             theta = np.load(theta_file).astype(np.float32)
-            x = parquet_to_numpy(lc_file)
+            x = parquet_to_numpy(lc_file, dfdata, parameters_to_condition_on)
 
             # Ensure leading batch dimension
             if theta.ndim == 1:
