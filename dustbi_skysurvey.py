@@ -254,6 +254,8 @@ def fit_lc_with_salt(filename):
     df_salt['cERR'] = np.sqrt(df_salt['cov_c_c'])
     df_salt['sn'] = list(targets_to_consider)
     df_salt['fitprob'] = scipy.stats.chi2.sf(df_salt['chisq'], df_salt['ndof'])
+    df_salt['mB'] = -2.5*np.log10(df_salt['x0']) + 10.502
+    df_salt['mBERR'] = 2.5*df_salt['x0_err']/(np.log(10)*df_salt['x0'])
 
     #CHECK 
     #Need to check if beta = 3.1 is appropriate, also check if M0 is necessary ! 
