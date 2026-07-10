@@ -355,3 +355,25 @@ def SKYexponential(xx, tau):
     if type(xx) is str: # assumed r_ input
             xx = eval(f"np.r_[{xx}]")
     return xx, np.heaviside(xx, 0)*np.exp(-xx/tau)/tau
+
+def SKYexponential_split(xx, tracer, tau_HM, tau_LM, split=10):
+    if type(xx) is str: # assumed r_ input
+            xx = eval(f"np.r_[{xx}]")
+    mask_mass = tracer < split
+    mask_mass = np.atleast_1d(mask_mass)[:,None]
+    LM_mode = np.heaviside(xx, 0)*np.exp(-xx/tau_HM)/tau_LM
+    HM_mode = np.heaviside(xx, 0)*np.exp(-xx/tau_HM)/tau_LM
+    pdf = mask_mass*LM_mode + (1-mask_mass)*HM_mode
+    return xx, pdf
+
+def SKYtruncnorm_split(xx, tracer, mu_HM, sig_HM, mu_LM, sig_LM, split=10, trunc_low=1.2):
+    if type(xx) is str: # assumed r_ input
+            xx = eval(f"np.r_[{xx}]")
+    mask_mass = tracer < split
+    mask_mass = np.atleast_1d(mask_mass)[:,None]
+    a_LM = (trunc_low - mu_LM) / sig_LM # truncated gaussian at 1.2
+    a_HM = (trunc_low - mu_HM) / sig_HM
+    LM_mode = scipy.stats.truncnorm.pdf(xx, a_LM, np.inf, loc=mu_LM, scale=sig_LM)
+    HM_mode = scipy.stats.truncnorm.pdf(xx, a_HM, np.inf, loc=mu_HM, scale=sig_HM)
+    pdf = mask_mass*LM_mode + (1-mask_mass)*HM_mode
+    return xx, pdf
