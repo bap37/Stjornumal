@@ -91,9 +91,9 @@ def initialise_model_stjarna(theta):
                      'name': 'host',
                      'frame': 'rest',
                      'model': {'hostebv': {"func": SKYexponential_split, 
-                                           "kwargs": {"xx":"0:2:0.001", "tau_HM":0.1, "tau_LM":0.1, "tracer":"@mass"}},
+                                           "kwargs": {"xx":"0:2:0.001", "tau_HM":tau_HM, "tau_LM":tau_LM, "tracer":"@mass"}},
                               'hostr_v': {"func": SKYtruncnorm_split, 
-                                          "kwargs": {"xx":"1:6:0.001", "mu_HM":3, "sig_HM":0.5, "mu_LM":3, "sig_LM":0.5,
+                                          "kwargs": {"xx":"1:6:0.001", "mu_HM":mu_rv_HM, "sig_HM":sig_rv_HM, "mu_LM":mu_rv_LM, "sig_LM":sig_rv_LM,
                                                      "tracer":"@mass"}}}}
     snia = skysurvey.SNeIa()
     snia.set_model(SNeIa)
