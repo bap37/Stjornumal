@@ -24,7 +24,8 @@ def draw_model_param_stjarna(priors_dict):
     """
     Priors are updated with values from the yaml, but are directly assigned here. 
     """
-    #First the c block
+    priors_sum = sum(len(v) for v in priors_dict.values())
+    assert priors_sum == 17, "The priors dictionary does not match between what Skysurvey expects and the yml file. Please investigate!"
     mu0, sigma0 = priors_dict['SIM_c']
     mu_c = np.random.uniform(low=mu0[0], high=mu0[1], size=1)
     sig_c = np.random.uniform(low=sigma0[0], high=sigma0[1], size=1)
