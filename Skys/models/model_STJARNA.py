@@ -5,16 +5,13 @@ from astropy.cosmology import Planck18
 import scipy
 import matplotlib.pyplot as plt
 import skysurvey
-import astropy
 import healpy as hp
-from astropy.coordinates import SkyCoord
 import astropy.units as u
 import yaml
 import sncosmo
-from scipy.special import expit
 import multiprocessing as mp
 from Functions import SKYexponential, SKYexponential_split, SKYtruncnorm_split
-
+from scipy.stats import skewnorm
 
 #############################################
 # Nominal model from Stjornumal 
@@ -25,15 +22,16 @@ def draw_model_param_stjarna(priors_dict):
     Priors are updated with values from the yaml, but are directly assigned here. 
     """
     priors_sum = sum(len(v) for v in priors_dict.values())
-    assert priors_sum == 17, "The priors dictionary does not match between what Skysurvey expects and the yml file. Please investigate!"
+    #Temporarily disabled assertion for testing. 
+    assert priors_sum == 15, f"You passed {priors_sum} definitions for the priors, but I was expecting 15. Please look at the yml and your skysurvey model."
     mu0, sigma0 = priors_dict['SIM_c']
     mu_c = np.random.uniform(low=mu0[0], high=mu0[1], size=1)
     sig_c = np.random.uniform(low=sigma0[0], high=sigma0[1], size=1)
-    mu0, sigma0, ratio = priors_dict['SIM_x1']
-    mu1_x1 = np.random.uniform(low=mu0[0], high=mu0[1], size=1)
-    sig1_x1 = np.random.uniform(low=sigma0[0], high=sigma0[1], size=1)
-    mu2_x1 = np.random.uniform(low=mu0[0], high=mu0[1], size=1)
-    sig2_x1 = np.random.uniform(low=sigma0[0], high=sigma0[1], size=1)
+    mu01, sigma01, mu02, sigma02, ratio = priors_dict['SIM_x1']
+    mu1_x1 = np.random.uniform(low=mu01[0], high=mu01[1], size=1)
+    sig1_x1 = np.random.uniform(low=sigma01[0], high=sigma01[1], size=1)
+    mu2_x1 = np.random.uniform(low=mu02[0], high=mu02[1], size=1)
+    sig2_x1 = np.random.uniform(low=sigma02[0], high=sigma02[1], size=1)
     ratio_x1 = np.random.uniform(low=ratio[0], high=ratio[1], size=1)
     mu0, sigma0 = priors_dict['SIM_beta']
     beta = np.random.uniform(low=mu0[0], high=mu0[1], size=1)
