@@ -230,11 +230,14 @@ def fit_lc_with_salt(filename):
     # SALT fits
     
     salt_fits = []
+    masses = []
 
     for i in range(len(targets_to_consider)):
         sn_name = targets_to_consider[i]
         lc = lcs[lcs.index == targets_to_consider[i]]
         sn = snias_new[snias_new['sn'] == targets_to_consider[i]]
+        mass = sn['mass'].iloc[0]
+        masses.append(mass)
         sn['mwebv'] = [0]
         df_result = fit_salt(lc, z_guess=sn['z'].iloc[0], t0_guess=sn['t0'].iloc[0]+scipy.stats.norm.rvs(0, 2), mwebv_guess=sn['mwebv'].iloc[0])
         salt_fits.append(np.array(df_result))
@@ -256,6 +259,7 @@ def fit_lc_with_salt(filename):
     df_salt['fitprob'] = scipy.stats.chi2.sf(df_salt['chisq'], df_salt['ndof'])
     df_salt['mB'] = -2.5*np.log10(df_salt['x0']) + 10.502
     df_salt['mBERR'] = 2.5*df_salt['x0_err']/(np.log(10)*df_salt['x0'])
+    df_salt['HOST_LOGMASS'] = masses
 
     #CHECK 
     #Need to check if beta = 3.1 is appropriate, also check if M0 is necessary ! 
@@ -287,6 +291,8 @@ def parquet_to_numpy(parquet_file, dfdata, parameters_to_condition_on):
     df = pd.read_parquet(parquet_file)
     df = df.drop(columns=["sn"]) #Not needed; also need to convert names... 
     df = df.sample(n=len(dfdata), random_state=1812)
+
+    print(list(df))
 
     df = df[parameters_to_condition_on]
 
