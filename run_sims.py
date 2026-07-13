@@ -166,41 +166,65 @@ if __name__ == "__main__":
 
 
 
-    #A quick hack to avoid the painful loading of a bunch of unnecessary features...
+    #A quick check to see which type of simulation we are requesting. 
     if args.SIMULATE:
-        df, dfdata = load_data(simfilename, datfilename)
 
-        print("Adding 'broad' MURES now. ")
-    
-        output_distribution = preprocess_input_distribution(
-            df, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
+        if infos['Skysurvey']:
+            print("Detected a request to use Skysurvey! Switching over; please note that we are disabling a lot of features in the yml now!")
+            is_skysurvey = True
+            df, dfdata = load_data(simfilename, datfilename)
+            
+        else:
+            df, dfdata = load_data(simfilename, datfilename)
 
-        MURES_SIMS = add_distance(output_distribution)
-        df['MURES'] = MURES_SIMS
+            print("Adding 'broad' MURES now. ")
+        
+            output_distribution = preprocess_input_distribution(
+                df, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
 
-        output_distribution = preprocess_input_distribution(
-            dfdata, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
+            MURES_SIMS = add_distance(output_distribution)
+            df['MURES'] = MURES_SIMS
 
-        MURES_DATA = add_distance(output_distribution)
-        dfdata['MURES'] = MURES_DATA
+            output_distribution = preprocess_input_distribution(
+                dfdata, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
 
-        print("We are temporarily not standardising data.")
-        #df, dfdata = standardise_data(df, dfdata, parameters_to_condition_on)
+            MURES_DATA = add_distance(output_distribution)
+            dfdata['MURES'] = MURES_DATA
 
-
-        sim_for_training = make_batched_simulator(layout, df,
-                                param_names,parameters_to_condition_on,
-                                dicts, dfdata, device=device, mixture=mixture,
-                                split_positions=split_positions)
-        batched = True
+            sim_for_training = make_batched_simulator(layout, df,
+                                    param_names,parameters_to_condition_on,
+                                    dicts, dfdata, device=device, mixture=mixture,
+                                    split_positions=split_positions)
+            batched = True
 
     if args.SIMULATE:
-        print(f"Training {n_sim} simulations and saving to {sims_savename}")
-        theta, priors = simulate_model(n_sim, n_batch, sims_savename, priors, sim_for_training, inference, device=device, batched=batched)
-        shutil.copy(args.CONFIG, posterior_savename.replace(".pt", ".yml.bk")).replace("posterior", "sims")
-        plot_surviving_priors(theta,priors,labels,sims_savename.replace("h5","survivng_priors.pdf"))
-        print("Quitting after simulation stage.")
-        quit()
+        if is_skysurvey:
+            from dustbi_skysurvey import *
+            ztf = initialise_ztf()
+            model_initialiser, theta_generator = model_chooser(infos)
+
+            #Need to implement a checker to see if we're on a batch queue or running locally. 
+
+            print(f"Generating {n_sim} simulations and saving the raw LCs to a temporary directory.")
+            tmp_outdir = simulate_model_lightcurves_skysurvey(infos, run_ztf, theta_generator, model_initialiser, ztf, device="cpu") #add dfdata
+            print("Finished generating raw LCs and truth values!")
+            import glob
+            tmp_files = glob.glob(f"{tmp_outdir}/*_truth.parquet")
+            print("Gathering list of files to fit with SALT.")
+            fit_model_lightcurves_skysurvey(tmp_files)
+            print("Done fitting SALT!")
+            tmp_outdir = "simulations/TMP/"
+            combine_to_h5(f"{tmp_outdir}", sims_savename, dfdata, parameters_to_condition_on)
+            #Then gather them all into a single h5 file, eventually... 
+
+        else:
+            print(f"Generating {n_sim} simulations and saving to {sims_savename}")
+            theta, priors = simulate_model(n_sim, n_batch, sims_savename, priors, sim_for_training, inference, device=device, batched=batched)
+            shutil.copy(args.CONFIG, posterior_savename.replace(".pt", ".yml.bk")).replace("posterior", "sims")
+            plot_surviving_priors(theta,priors,labels,sims_savename.replace("h5","survivng_priors.pdf"))
+            print("Quitting after simulation stage.")
+            quit()
+
     ################
     if args.TRAIN:
     ################

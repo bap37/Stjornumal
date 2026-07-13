@@ -12,10 +12,10 @@ parameters_to_condition_on:
     ['c', 'mB', 'x1', 'zHD', 'cERR', 'mBERR', 'x1ERR', 'MU', 'HOST_LOGMASS', 'MURES']
 
 sim_parameters:
-    n_sim:   100_000 
-    n_batch: 500
-    simname: 'simulations/sims.v5.NOM.h5'
-    posteriorname: 'posteriors/posterior.v5.NOM.pt'
+    n_sim:   4
+    n_batch: 2
+    simname: 'simulations/sims.v5.SKYS.h5'
+    posteriorname: 'posteriors/posterior.v5.SKYS.pt'
 
 #Optional key; for use with run_nre.py. Otherwise leave as None
 Models_Comparison:
@@ -27,7 +27,7 @@ Models_Comparison:
     STJARNA_2COLOURS.yml
 
 Data_File:
-    "DES5YR.FITRES.gz"
+    "data_files/ZTF_G25.csv"
 Simbank_File:
     "SIMBANK_BIG.FITRES.gz"
 
@@ -37,6 +37,9 @@ Simbank_File:
 #########################
 
 #Override feature to force use of skysurvey. Disables Functions, Splits, Correlations, and currently Priors as well 
+Skysurvey:
+   Stjarna
+
 
 #########################
 # Dictionaries 
@@ -47,7 +50,7 @@ Functions:
     SIM_RV:   DistGaussian
     SIM_EBV:  DistExponential
     SIM_beta: DistGaussian
-    SIM_x1:   DistGaussian
+    SIM_x1:   DistDoubleGaussian
 
 Splits:
     SIM_RV:  ["Stepwise","HOST_LOGMASS", 10] #A list containing the split parameter and location
@@ -72,7 +75,7 @@ Priors:
     SIM_c:    ['(-.1, 0)', '(0.02, 0.1)']
     SIM_EBV:  ['(0.05, 0.5)']
     SIM_beta: ['(1.5,3)', '(0.05, 0.3)']
-    SIM_x1:   ['(-2,2)', '(0.2, 1.5)']
+    SIM_x1:   ['(-2,0)', '(0.2, 1.5)', '(0,2)', '(0.2, 1.5)', '(0, 1)']
     SIM_x1_EVOL: ['(-0.2,0.2)']
     STEP:     ['(-0.2,0.2)']
     SCATTER:  ['(0,0.1)']
@@ -84,8 +87,8 @@ Priors:
 # Fancy latex labels for plotting. Add as you see fit. 
 Latex_Names:
     DistExponential:   ['$\tau$']
-    DistGaussian:      ['$\mu$', '$\sigma$']
-    DistGaussian_EVOL: ['$\mu$', '$\sigma$', '$\mu slope$']
+    DistDoubleGaussian: ['$\mu$', '$\sigma$', '$\mu$', '$\sigma$', $a$]
+    DistGaussian: ['$\mu$', '$\sigma$']
     SIM_c:             '$c_{int}$'
     SIM_beta:          '$\beta_{int}$'
     SIM_RV:            '$R_V$'

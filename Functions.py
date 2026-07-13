@@ -1,5 +1,6 @@
 import torch
 import math
+import numpy as np
 
 ##############
 # torch-compatible functions live in this code block; must start with "Dist"
@@ -344,3 +345,47 @@ def DistDelta(theta):
     batch_size = theta.shape[0]
 
     return 
+
+
+#########################
+# Skysurvey related functions live here, denoted with "SKY" preceding the model .
+########################
+
+def SKYexponential(xx, tau):
+    if type(xx) is str: # assumed r_ input
+            xx = eval(f"np.r_[{xx}]")
+    return xx, np.heaviside(xx, 0)*np.exp(-xx/tau)/tau
+
+def SKYexponential_split(xx, tracer, tau_HM, tau_LM, split=10):
+    if type(xx) is str: # assumed r_ input
+            xx = eval(f"np.r_[{xx}]")
+    mask_mass = tracer < split
+    mask_mass = np.atleast_1d(mask_mass)[:,None]
+    LM_mode = np.heaviside(xx, 0)*np.exp(-xx/tau_HM)/tau_LM
+    HM_mode = np.heaviside(xx, 0)*np.exp(-xx/tau_HM)/tau_LM
+    pdf = mask_mass*LM_mode + (1-mask_mass)*HM_mode
+    return xx, pdf
+
+def SKYtruncnorm_split(xx, tracer, mu_HM, sig_HM, mu_LM, sig_LM, split=10, trunc_low=1.2):
+    import scipy.stats
+    if type(xx) is str: # assumed r_ input
+            xx = eval(f"np.r_[{xx}]")
+    mask_mass = tracer < split
+    mask_mass = np.atleast_1d(mask_mass)[:,None]
+    a_LM = (trunc_low - mu_LM) / sig_LM # truncated gaussian at 1.2
+    a_HM = (trunc_low - mu_HM) / sig_HM
+    LM_mode = scipy.stats.truncnorm.pdf(xx, a_LM, np.inf, loc=mu_LM, scale=sig_LM)
+    HM_mode = scipy.stats.truncnorm.pdf(xx, a_HM, np.inf, loc=mu_HM, scale=sig_HM)
+    pdf = mask_mass*LM_mode + (1-mask_mass)*HM_mode
+    return xx, pdf
+
+def SKYmass_to_stretch(mass, xx="-4:4:0.005", mu1=0.33, sigma1=0.64, mu2=-1.50, sigma2=0.58, a=0.45):
+    from scipy.stats import norm
+    if type(xx) is str: # assumed r_ input
+            xx = eval(f"np.r_[{xx}]")
+    mode1 = norm.pdf(xx, loc=mu1, scale=sigma1)
+    mode2 = norm.pdf(xx, loc=mu2, scale=sigma2)
+    mask_mass = mass < 10
+    mask_mass = np.atleast_1d(mask_mass)[:,None]
+    pdf = mask_mass*mode1 + (1-mask_mass)*(a*mode1 + (1-a)*mode2)
+    return xx, pdf

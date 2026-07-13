@@ -276,7 +276,7 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
 
             for i in range(layout.counts[dist]):
                 name = layout.order[dist][i]
-
+                #print(name, theta_dist)
                 if "_EVOL" in name:
                     name = name.split("_EVOL_")[0]
 
@@ -571,6 +571,7 @@ def validate_order(param_names, dicts):
 
     return True
 
+
 def unspool_labels(
     param_names,
     dicts,
@@ -621,12 +622,12 @@ def unspool_labels(
             if ("Gaussian" in func_name) and (func_name != "DistDoubleGaussian"):
                 add(func_params[:2])  # mu, sigma
 
-                if base_name in split_dict:
-                    evol_type = split_dict[base_name][0]
-                    if evol_type == "Stepwise":
-                        add(func_params[:2])
-                    elif evol_type == "Linear":
-                        add([r"$m$"])  # slope (you may want a better latex)
+#                if base_name in split_dict:
+#                    evol_type = split_dict[base_name][0]
+#                    if evol_type == "Stepwise":
+#                        add(func_params[:2])
+#                    elif evol_type == "Linear":
+#                        add([r"$m$"])  # slope (you may want a better latex)
 
             elif "DistDelta" in func_name:
                 add(func_params[:1])
@@ -634,12 +635,12 @@ def unspool_labels(
             elif "DistExponential" in func_name:
                 add(func_params[:1])
 
-                if base_name in split_dict:
-                    evol_type = split_dict[base_name][0]
-                    if evol_type == "Stepwise":
-                        add(func_params[:1])
-                    elif evol_type == "Linear":
-                        add([r"$m$"])
+#                if base_name in split_dict:
+#                    evol_type = split_dict[base_name][0]
+#                    if evol_type == "Stepwise":
+#                        add(func_params[:1])
+#                    elif evol_type == "Linear":
+#                        add([r"$m$"])
 
             elif func_name == "DistDoubleGaussian":
                 add(func_params[:5])
@@ -673,8 +674,12 @@ def unspool_labels(
     # -------------------------------------------------
     # Non-mixture
     # -------------------------------------------------
+    params_to_fit = parameter_generation(param_names, dicts)
+
+    print("Please check labels if using a weird linear function or stepwise!")
+
     if not mixture:
-        return expand_labels(param_names) + expand_special(param_names)
+        return expand_labels(params_to_fit) + expand_special(params_to_fit)
 
     # -------------------------------------------------
     # Mixture
@@ -946,6 +951,7 @@ def simulate_model(n_sim, n_batch, sims_savename, priors, simulator, inference, 
     theta_valid = theta_tot[mask_tot]
 
     p_vals = priors.sample((n_sim,))
+
 
     return theta_valid, p_vals
 
