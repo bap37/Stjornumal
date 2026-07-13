@@ -10,7 +10,7 @@ import astropy.units as u
 import yaml
 import sncosmo
 import multiprocessing as mp
-from Functions import SKYexponential, SKYexponential_split, SKYtruncnorm_split
+from Functions import SKYexponential, SKYexponential_split, SKYtruncnorm_split, SKYmass_to_stretch
 from scipy.stats import skewnorm
 
 #############################################
@@ -73,7 +73,7 @@ def initialise_model_stjarna(theta):
                             "kwargs":{"a":-5.2, "loc":10.894, "scale":1.29}
                           },
              
-                    x1 = {"func": mass_to_stretch,
+                    x1 = {"func": SKYmass_to_stretch,
                                "kwargs":{"mass":"@mass", "a":ratio_x1, "mu1":mu1_x1, "sigma1":sig1_x1, "mu2":mu2_x1, "sigma2":sig2_x1}
                           }, 
                    
