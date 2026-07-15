@@ -954,7 +954,45 @@ def simulate_model(n_sim, n_batch, sims_savename, priors, simulator, inference, 
 
     return theta_valid, p_vals
 
+def get_valid_indices(filename, chunk_size=10000):
 
+    from sbi.utils.sbiutils import handle_invalid_x
+    import h5py
+
+    valid_indices = []
+
+    with h5py.File(filename, "r") as f:
+
+        x = f["x"]
+
+        n = x.shape[0]
+
+        for start in range(0, n, chunk_size):
+
+            end = min(start + chunk_size, n)
+
+            x_chunk = torch.tensor(
+                x[start:end]
+            )
+
+            # This is the same cleaning logic used by sbi.
+            valid_mask, num_nans, num_infs = handle_invalid_x(
+                x_chunk,
+                exclude_invalid_x=True,
+            )
+
+            valid_indices.extend(
+                np.where(valid_mask.numpy())[0] + start
+            )
+
+            if num_nans > 0 or num_infs > 0:
+                print(
+                    f"Chunk {start}:{end}: "
+                    f"removed {num_nans} NaN and "
+                    f"{num_infs} Inf simulations"
+                )
+
+    return np.asarray(valid_indices)
 
 
 ##########################

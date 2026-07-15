@@ -237,31 +237,119 @@ if __name__ == "__main__":
         import h5py
 
         with h5py.File(sims_savename, "r") as f:
-            theta_total = f["theta"]
-            x_total = f["x"]
-            n = theta_total.shape[0]
-            chunk_size = 10_000
+            theta_init = torch.tensor(f["theta"][:1000]).float()
+            x_init = torch.tensor(f["x"][:1000]).float()
 
-            for start in range(0, n, chunk_size):
-                end = min(start + chunk_size, n)
-                print(f"Appending chunk {start}:{end}")
+        inference.append_simulations(theta_init, x_init)
 
-                theta_batch = torch.tensor(theta_total[start:end])
-                x_batch = torch.tensor(x_total[start:end])
-
-                inference.append_simulations(theta_batch, x_batch, data_device="cpu")
-
-        # Train once on all accumulated data
         density_estimator = inference.train(
-            validation_fraction=0.1,
-            force_first_round_loss=True,
-            training_batch_size=64,
+            max_num_epochs=1,
+            training_batch_size=128,
         )
 
-        posterior = inference.build_posterior(density_estimator)
+        print("\n")
 
-        with open(posterior_savename, "wb") as handle:
-            pickle.dump(posterior, handle)
+        from torch.utils.data import Dataset
+
+        class HDF5SimulationDataset(Dataset):
+
+            def __init__(self, filename):
+                self.filename = filename
+                self.valid_indices = get_valid_indices(filename)
+                print(
+                    f"Using {len(self.valid_indices)} "
+                    "valid simulations"
+                )
+                self.file = None
+
+
+            def _open(self):
+                if self.file is None:
+                    self.file = h5py.File(
+                        self.filename,
+                        "r"
+                    )
+                    self.theta = self.file["theta"]
+                    self.x = self.file["x"]
+            def __len__(self):
+                return len(self.valid_indices)
+
+
+            def __getitem__(self, idx):
+                self._open()
+                i = self.valid_indices[idx]
+                theta = torch.tensor(
+                    self.theta[i],
+                    dtype=torch.float32
+                )
+
+                x = torch.tensor(
+                    self.x[i],
+                    dtype=torch.float32
+                )
+
+                return theta, x
+
+        from torch.utils.data import DataLoader
+        from torch.optim import Adam
+
+        dataset = HDF5SimulationDataset(sims_savename)
+
+        stop_after_epochs = 20  # Stop training after 20 epochs with no improvement
+        max_num_epochs = 2**31 - 1
+        learning_rate = 5e-4
+
+        train_loss_sum = 0.0
+
+        train_loader = DataLoader(
+            dataset,
+            batch_size=64,
+            shuffle=True,
+            drop_last=True,
+            num_workers=0,
+        )
+
+        optimizer = Adam(
+            list(density_estimator.parameters()),
+            lr=learning_rate,
+        )
+
+        for epoch in range(max_num_epochs):
+
+            density_estimator.train()
+
+            for theta_batch, x_batch in train_loader:
+
+                theta_batch = theta_batch.to(device)
+                x_batch = x_batch.to(device)
+
+                optimizer.zero_grad()
+
+                train_losses = density_estimator.loss(
+                    theta_batch,
+                    x_batch,
+                )
+
+                train_loss = torch.mean(train_losses)
+
+                train_loss.backward()
+
+                optimizer.step()
+
+                train_loss_sum += train_losses.sum().item()
+
+            train_loss_average = train_loss_sum / len(dataset)
+
+            print(
+                f"Epoch {epoch + 1}/{max_num_epochs} "
+                f"- train loss: {train_loss_average:.5f}"
+            )
+
+        ###################
+        posterior = inference.build_posterior(net)
+
+        with open(posterior_savename, "wb") as f:
+            pickle.dump(posterior, f)
 
         print(f"Posterior saved to {posterior_savename}")
         plot_loss(inference, posterior_savename.replace(".pt", "_loss.pdf"))
