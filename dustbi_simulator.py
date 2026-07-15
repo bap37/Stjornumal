@@ -291,7 +291,6 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
                     x = df_tensor[name]      # (N,)
                 if x.ndim == 1:
                     x = x.unsqueeze(0)  # (1, N)
-                if debug: print(name, theta_dist.shape, x.ndim)
                 batch_size = B
                 correlation = df_tensor.get(corr_dict.get(name)) if corr_dict.get(name) else None
 
