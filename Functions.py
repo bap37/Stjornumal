@@ -345,6 +345,21 @@ def DistDelta(theta):
     batch_size = theta.shape[0]
 
     return 
+def Selection_Spline(x,theta, basis):
+    import torch
+    """
+    theta : (B, K)
+    basis : (N, K)
+
+    Returns
+    -------
+    weights : (B, N)
+    """
+
+    weights = theta @ basis.T
+
+    # Turn into probabilities
+    return torch.sigmoid(weights)
 
 
 #########################
