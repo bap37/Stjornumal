@@ -109,8 +109,11 @@ if __name__ == "__main__":
         infos['Splits'] = {}
         print("Temporarily hacking splits to be an empty dict")
     
+    #if we are trying to fit for the selection function
 
-    dicts = [infos['Functions'], infos['Splits'], infos['Priors'], infos['Correlations']]
+    knot_lists, parameters_to_condition_on, infos = create_knots(infos)
+
+    dicts = [infos['Functions'], infos['Splits'], infos['Priors'], infos['Correlations'], infos['selection_parameters']]
 
     ##############################
     # Load information and setup
@@ -143,7 +146,7 @@ if __name__ == "__main__":
             f"split_positions count ({len(split_positions)}) doesn't match priors_B_split count ({len(priors_B_split)})"
         print(f"Mixture mode: {len(priors_A)} pop A + {len(priors_B_split)} pop B (split) + 1 mixing + {len(special)} special = {len(priors_A)+len(priors_B_split)+1+len(special)} total priors; {len(shared_params)} param(s) shared: {shared_params}")
     else:
-        priors = prior_generator(param_names, dicts, device=device)
+        priors = prior_generator(param_names, dicts, knot_list, selection_parameters, device=device)
         labels = unspool_labels(param_names, dicts, infos['Latex_Names'], infos['Functions'], mixture=False, infos=infos )
 
     ndim = len(parameters_to_condition_on)

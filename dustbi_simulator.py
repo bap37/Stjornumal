@@ -38,7 +38,7 @@ def build_theta_layout(counts, n_params):
     
 def build_layout(param_names, dicts):
 
-    function_dict, split_dict, priors_dict, corr_dict = dicts
+    function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts
 
     idx = {
         "gauss": [],
@@ -68,7 +68,7 @@ def build_layout(param_names, dicts):
         "logistic": [],
     }
 
-    params_to_avoid = ['STEP', 'SCATTER']
+    params_to_avoid = ['STEP', 'SCATTER', 'SELECTION']
 
     for i, name in enumerate(param_names):
 
@@ -196,10 +196,10 @@ def compute_split_positions(layout, shared_params=None):
 def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
                            dicts, dfdata, sub_batch=10, device="cpu", debug=False,
                            mixture=False, split_positions=None):
-    function_dict, split_dict, priors_dict, corr_dict = dicts
+    function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts
     validate_order(param_names, dicts)
 
-    params_to_avoid = ['STEP', 'SCATTER', 'EVOL']
+    params_to_avoid = ['STEP', 'SCATTER', 'EVOL', 'SELECTION']
     
     splits = list({v[1] for v in split_dict.values()})
     
@@ -211,6 +211,13 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
         col for col in all_cols
         if not any(substr in col for substr in params_to_avoid)
     ]
+
+    #And a quick cleaning to ensure valid magnitudes ! 
+
+    if 'SELECTION' in param_names:
+        for select in selection_dict['parameters']:
+            df = df.loc[df[select] > 0]
+        print("Cutting out bad peak magnitudes... This may cause a problem. Flagging it ! ")
 
     #print(all_cols)
     
@@ -244,6 +251,23 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
             device=device
         )
 
+    selection_basis = {}
+
+    if "SELECTION" in param_names:
+        n_coeffs = selection_dict["n_coeff"]
+
+        for param in selection_dict["parameters"]:
+
+            xmin = torch.amin(df_tensor[param]).item()
+            xmax = torch.amax(df_tensor[param]).item()
+
+            selection_basis[param] = build_bspline_basis(
+                df_tensor[param],
+                xmin,
+                xmax,
+                n_coeffs,
+            )
+
     N = len(df)
     n_target = len(dfdata)
 
@@ -269,7 +293,7 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
                 continue
             if dist == "delta":
                 continue
-
+            
             theta_dist = theta_pop[:, layout.slices[dist]]
             n_param = layout.n_params[dist]
             theta_dist = theta_dist.view(B, layout.counts[dist], n_param)
@@ -373,6 +397,31 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
         else:
             joint_weights = _compute_joint_weights(theta, B, dev, extra_tensors=extra_tensors)
 
+        #BRODIE NOTE 
+        if 'SELECTION' in param_names:
+            n_coeff = selection_dict["n_coeff"]
+
+            extra_priors = (n_coeff * len(selection_dict["parameters"]))
+            selection_theta = theta[:, -extra_priors:]
+
+            for n, param in enumerate(selection_dict["parameters"]):
+
+                start = n * n_coeff ; end = (n + 1) * n_coeff
+                coeffs = selection_theta[:, start:end]
+
+                weights = Selection_Spline(df_tensor[param], coeffs, selection_basis[param])
+                joint_weights *= weights
+
+        else:
+            extra_priors = 0
+
+        #Need to add stuff in here to do selection function determination ! 
+        #if SELECTION in param_names CHECK
+        #calculate the number of parameters and find their location (always last) CHECK 
+        #pass along to a function that builds the spline and does selection on it
+        #return joint weights
+        #also inform where STEP/SCATTER are ... 
+
         # --- Normalise ---
         weight_sum = joint_weights.sum(dim=1, keepdim=True)  # (B, 1)
         bad_mask = (weight_sum.squeeze(1) == 0)
@@ -411,11 +460,13 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
         # --- Batched output tensor indexing ---
         result = output_stack[resampled_idx]  # (B, n_target, n_features)
 
+        #BRODIE NOTE 
+        #Need to fix this ... change hard-coded values :(
         if "STEP" in param_names:
             if "SCATTER" in param_names:
-                temp_index = -2
+                temp_index = -2-extra_priors
             else:
-                temp_index = -1
+                temp_index = -1-extra_priors
             #temp_index = param_names.index("STEP")
             if mixture:
                 gamma = theta[:, temp_index].view(-1, 1, 1)
@@ -432,7 +483,7 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
 
         #Then if grey scatter is enabled, add it to this nonsense.            
         if "SCATTER" in param_names:
-            temp_index = -1
+            temp_index = -1-extra_priors
             #temp_index = param_names.index("SCATTER")
             scatter = theta[:, temp_index].view(-1, 1, 1)
             scatter = torch.clamp(scatter, min=1e-6)
@@ -480,6 +531,59 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
 ### BEGIN SUPPORT FUNCTIONS
 ###########################
 
+from scipy.interpolate import BSpline
+import numpy as np
+import torch
+
+
+def build_bspline_basis(x, x_min, x_max, n_coeffs, degree=3):
+    """
+    Build a cubic B-spline basis with exactly n_coeffs basis functions.
+
+    Parameters
+    ----------
+    x : torch.Tensor (N,)
+        Evaluation locations.
+    x_min, x_max : float
+        Domain of the spline.
+    n_coeffs : int
+        Number of spline coefficients (basis functions).
+
+    Returns
+    -------
+    basis : torch.Tensor (N, n_coeffs)
+    """
+
+    x = x.detach().cpu().numpy()
+
+    # Number of interior knots required
+    n_internal = max(n_coeffs - degree - 1, 0)
+
+    if n_internal > 0:
+        internal = np.linspace(x_min, x_max, n_internal + 2)[1:-1]
+    else:
+        internal = np.array([])
+
+    # Open-uniform knot vector
+    t = np.concatenate([
+        np.repeat(x_min, degree + 1),
+        internal,
+        np.repeat(x_max, degree + 1),
+    ])
+
+    basis = np.empty((len(x), n_coeffs))
+
+    for i in range(n_coeffs):
+        coeffs = np.zeros(n_coeffs)
+        coeffs[i] = 1.0
+
+        spline = BSpline(t, coeffs, degree, extrapolate=False)
+        basis[:, i] = spline(x)
+
+    basis = np.nan_to_num(basis)
+
+    return torch.tensor(basis, dtype=torch.float32)
+
 def preprocess_input_distribution(df, cols):
     return {
         col: torch.tensor(df[col].to_numpy(), dtype=torch.float32)
@@ -490,9 +594,10 @@ def preprocess_input_distribution(df, cols):
 def parameter_generation(list_of_parameter_names, dicts):
     
     empty_list = []
-    function_dict, split_dict, priors_dict, corr_dict = dicts
+    function_dict, split_dict, priors_dict, corr_dict, selection_dicts = dicts
     
     for name in list_of_parameter_names:
+        if name == "SELECTION": continue
         if name in split_dict.keys():
             evol_type = (split_dict[name][0])
             if evol_type == 'Stepwise':
@@ -533,13 +638,16 @@ def validate_order(param_names, dicts):
     """
     Catchall error trapping function to be called during initialisation. 
     """
-    function_dict, split_dict, priors_dict, corr_dict = dicts    
+    function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts    
 
     params_to_avoid = ["STEP", "SCATTER"]
 
     validate_step(param_names, params_to_avoid)
 
-    #Will need to add other functions in as they are implemented; make sure that Exponential is always last 
+    #Adding SELECTION in because it can be treated as a regular parameter for this purpose.
+    params_to_avoid += ["SELECTION"]
+
+    #Will need to add other functions in as they are implemented
     order_priority = {
         DistGaussian: 2,
         DistTruncatedGaussian: 2,
@@ -583,7 +691,7 @@ def unspool_labels(
     Generate labels in EXACT same order as priors.
     """
 
-    function_dict_, split_dict, priors_dict, _ = dicts
+    function_dict_, split_dict, priors_dict, _, selection_dict = dicts
 
     def expand_labels(names, tag=None):
         labels = []
@@ -791,6 +899,58 @@ def load_kestrel(filename):
         pop_b['mixing_prior'] = ast.literal_eval(pop_b['mixing_prior'])
 
     return raw_yaml
+
+def create_knots(infos):
+    import pandas as pd
+
+    parameters_to_condition_on = infos['parameters_to_condition_on']
+    datfilename = infos['Data_File'][0]
+
+    if infos.get('selection_parameters'):
+    
+        selection_parameters = infos['selection_parameters']['parameters']
+        n_coeff = infos['selection_parameters']['n_coeff']
+        
+        dfdata = pd.read_csv(
+            datfilename,
+            comment="#",
+            sep=r'\s+'
+        )
+    
+        # Remove invalid selection values
+        for param in selection_parameters:
+            dfdata = dfdata.loc[dfdata[param] > 0]
+    
+        # Build an independent knot grid for each selection parameter
+        knot_lists = {}
+    
+        for param in selection_parameters:
+            lower = np.amin(dfdata[param].values)
+            upper = np.amax(dfdata[param].values)
+    
+            knot_lists[param] = np.linspace(
+                lower,
+                upper,
+                n_coeff
+            )
+    
+        # Add selection parameters onto parameters_to_condition_on if needed
+        parameters_to_condition_on.extend(
+            p for p in selection_parameters
+            if p not in parameters_to_condition_on
+        )
+    
+        print(
+            f"I am adding {selection_parameters} to parameters_to_condition_on, "
+            "if you have not already!"
+        )
+    
+    else:
+        knot_lists = None
+        infos['selection_parameters'] = {}
+        selection_parameters = None
+
+    return knot_lists, parameters_to_condition_on, infos, selection_parameters
 
 def add_distance(df_tensor):
     
@@ -1054,10 +1214,10 @@ def distancinator(x0_obs, x0_err, x1_obs, x1_err, c_obs, c_err, dist_mod):
 
 def build_distribution_priors(param_names, dicts, device='cpu'):
     """Build the list of BoxUniform priors for distribution parameters only (no STEP/SCATTER)."""
-    function_dict, split_dict, priors_dict, corr_dict = dicts
+    function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts
     list_o_priors = []
 
-    params_to_avoid = ['EVOL', 'STEP', 'SCATTER']
+    params_to_avoid = ['EVOL', 'STEP', 'SCATTER', 'SELECTION']
 
     for name in param_names:
         if name in params_to_avoid:
@@ -1205,9 +1365,9 @@ def build_distribution_priors(param_names, dicts, device='cpu'):
     return list_o_priors
 
 
-def build_special_priors(param_names, dicts, device='cpu'):
+def build_special_priors(param_names, dicts, knot_list=None, selection_parameters=None, device='cpu'):
     """Build the list of priors for STEP and SCATTER (appended last in theta)."""
-    _, _, priors_dict, _ = dicts
+    _, _, priors_dict, _, selection_dict = dicts
     list_o_priors = []
 
     if "STEP" in param_names:
@@ -1226,12 +1386,21 @@ def build_special_priors(param_names, dicts, device='cpu'):
             )
         list_o_priors.extend([scatter_prior])
 
+    if "SELECTION" in param_names:
+        for s in selection_parameters:
+            for _ in range(len(knot_list[s])):
+                selection_prior = BoxUniform(
+                    low=torch.tensor([0], dtype=torch.float32, device=device),
+                    high=torch.tensor([5], dtype=torch.float32, device=device)
+                )
+                list_o_priors.append(selection_prior)
+
     return list_o_priors
 
 
-def prior_generator(param_names, dicts, device='cpu'):
+def prior_generator(param_names, dicts, knot_list=None, selection_parameters=None, device='cpu'):
     all_priors = build_distribution_priors(param_names, dicts, device=device) + \
-                 build_special_priors(param_names, dicts, device=device)
+                 build_special_priors(param_names, dicts, knot_list, selection_parameters, device=device)
     print(f"Added {len(all_priors)} priors")
     return MultipleIndependent(all_priors, device=device)
 
