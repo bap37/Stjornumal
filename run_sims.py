@@ -120,6 +120,7 @@ if __name__ == "__main__":
     mixture = 'Population_B' in infos
     split_positions = None
     if mixture:
+        if infos['selection_parameters']: print("Selection Function currently not enabled with mixture model!") ; quit()
         pop_b = infos['Population_B']
         shared_params = [p for p in pop_b.get('shared_params', []) if p not in ('STEP', 'SCATTER')]
         # Pop B gets priors only for non-shared params
