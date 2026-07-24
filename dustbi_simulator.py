@@ -194,7 +194,7 @@ def compute_split_positions(layout, shared_params=None):
 
 
 def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
-                           dicts, dfdata, sub_batch=10, device="cpu", debug=False,
+                           dicts, dfdata, sub_batch=40, device="cpu", debug=False,
                            mixture=False, split_positions=None):
     function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts
     validate_order(param_names, dicts)
@@ -835,6 +835,24 @@ def split_outputs(output_distribution, split_tensor, split_val, param_list):
 
     return torch.stack(out, dim=-1)
 
+def check_special_inputs(infos):
+    try: 
+        infos['Splits']
+    except KeyError:
+        infos['Splits'] = {}
+        print("Temporarily hacking splits to be an empty dict")
+    
+    try:
+        infos['selection_parameters']
+    except KeyError:
+        infos['selection_parameters'] = {}
+
+    try:
+        infos['Skysuryey']
+    except KeyError:
+        infos['Skysurvey'] = False
+
+    return infos
 
 def preprocess_data(parameters_to_condition_on, dfdata, ):
     

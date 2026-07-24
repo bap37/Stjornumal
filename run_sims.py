@@ -103,15 +103,8 @@ if __name__ == "__main__":
     sims_savename = infos['sim_parameters']['simname']
     posterior_savename = infos['sim_parameters']['posteriorname']
 
-    try: 
-        infos['Splits']
-    except KeyError:
-        infos['Splits'] = {}
-        print("Temporarily hacking splits to be an empty dict")
-    
-    #if we are trying to fit for the selection function
-
-    knot_lists, parameters_to_condition_on, infos = create_knots(infos)
+    #check for any special inputs - e.g. if splits are missing; if selection_parameters or skysurvey are enabled.
+    infos = check_special_inputs(infos)
 
     dicts = [infos['Functions'], infos['Splits'], infos['Priors'], infos['Correlations'], infos['selection_parameters']]
 
@@ -146,11 +139,19 @@ if __name__ == "__main__":
             f"split_positions count ({len(split_positions)}) doesn't match priors_B_split count ({len(priors_B_split)})"
         print(f"Mixture mode: {len(priors_A)} pop A + {len(priors_B_split)} pop B (split) + 1 mixing + {len(special)} special = {len(priors_A)+len(priors_B_split)+1+len(special)} total priors; {len(shared_params)} param(s) shared: {shared_params}")
     else:
-        priors = prior_generator(param_names, dicts, knot_list, selection_parameters, device=device)
-        labels = unspool_labels(param_names, dicts, infos['Latex_Names'], infos['Functions'], mixture=False, infos=infos )
+        parameters_to_condition_on = infos['parameters_to_condition_on']
+
+        knot_lists, parameters_to_condition_on, infos, selection_parameters = create_knots(infos)
+        
+        param_names = infos['param_names']
+
+        params_to_fit = parameter_generation(param_names, dicts)
+        priors = prior_generator(param_names, dicts, knot_lists, selection_parameters, device='cpu')
+
+        layout = build_layout(params_to_fit, dicts)
 
     ndim = len(parameters_to_condition_on)
-    print(f"The NN will be trained on a {ndim}-dimensional space, on {param_names}")
+    print(f"The NN will be trained on a {ndim}-dimensional space, on {parameters_to_condition_on}")
 
     ###############
     #Do some quick checks and establish density estimator and inference pipelines.
@@ -172,6 +173,7 @@ if __name__ == "__main__":
     #A quick check to see which type of simulation we are requesting. 
     if args.SIMULATE:
 
+        is_skysurvey = False
         if infos['Skysurvey']:
             print("Detected a request to use Skysurvey! Switching over; please note that we are disabling a lot of features in the yml now!")
             is_skysurvey = True
@@ -181,18 +183,22 @@ if __name__ == "__main__":
             df, dfdata = load_data(simfilename, datfilename)
 
             print("Adding 'broad' MURES now. ")
+            parameters_to_condition_on.remove("MURES")
+
         
             output_distribution = preprocess_input_distribution(
-                df, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
+                df, parameters_to_condition_on+['x0', 'x0ERR', 'MU'])
 
             MURES_SIMS = add_distance(output_distribution)
             df['MURES'] = MURES_SIMS
 
             output_distribution = preprocess_input_distribution(
-                dfdata, parameters_to_condition_on[:-1]+['x0', 'x0ERR', 'MU'])
+                dfdata, parameters_to_condition_on+['x0', 'x0ERR', 'MU'])
 
             MURES_DATA = add_distance(output_distribution)
             dfdata['MURES'] = MURES_DATA
+
+            parameters_to_condition_on += ['MURES']
 
             sim_for_training = make_batched_simulator(layout, df,
                                     param_names,parameters_to_condition_on,
