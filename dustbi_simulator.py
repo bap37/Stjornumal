@@ -553,7 +553,8 @@ def build_bspline_basis(x, x_min, x_max, n_coeffs, degree=3):
     -------
     basis : torch.Tensor (N, n_coeffs)
     """
-
+    device = x.device
+    
     x = x.detach().cpu().numpy()
 
     # Number of interior knots required
@@ -582,7 +583,7 @@ def build_bspline_basis(x, x_min, x_max, n_coeffs, degree=3):
 
     basis = np.nan_to_num(basis)
 
-    return torch.tensor(basis, dtype=torch.float32)
+    return torch.tensor(basis, dtype=torch.float32, device=device)
 
 def preprocess_input_distribution(df, cols):
     return {

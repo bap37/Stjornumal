@@ -146,7 +146,7 @@ if __name__ == "__main__":
         param_names = infos['param_names']
 
         params_to_fit = parameter_generation(param_names, dicts)
-        priors = prior_generator(param_names, dicts, knot_lists, selection_parameters, device='cpu')
+        priors = prior_generator(param_names, dicts, knot_lists, selection_parameters, device=device)
 
         layout = build_layout(params_to_fit, dicts)
 
