@@ -1409,7 +1409,7 @@ def build_special_priors(param_names, dicts, knot_list=None, selection_parameter
         for s in selection_parameters:
             for _ in range(len(knot_list[s])):
                 selection_prior = BoxUniform(
-                    low=torch.tensor([0], dtype=torch.float32, device=device),
+                    low=torch.tensor([-5], dtype=torch.float32, device=device),
                     high=torch.tensor([5], dtype=torch.float32, device=device)
                 )
                 list_o_priors.append(selection_prior)
