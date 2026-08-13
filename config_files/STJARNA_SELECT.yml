@@ -5,11 +5,10 @@ param_names:
     SIM_x1
     SIM_EBV
     SELECTION
-    STEP
     SCATTER
 
 selection_parameters:
-    parameters: ['HOST_MAG_g', 'HOST_MAG_r']
+    parameters: ['HOST_MAG_r']
     n_coeff: 10
 
 parameters_to_condition_on:
@@ -31,9 +30,9 @@ Models_Comparison:
     STJARNA_2COLOURS.yml
 
 Data_File:
-    "DES5YR.FITRES.gz"
+    "SELECTION/SIM_DATA_SMALL.FITRES.gz"
 Simbank_File:
-    "SIMBANK_BIG.FITRES.gz"
+    "SELECTION/SELECTION_SIMBANK.FITRES.gz"
 
 
 #########################
