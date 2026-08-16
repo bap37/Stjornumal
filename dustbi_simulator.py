@@ -977,8 +977,9 @@ def add_distance(df_tensor):
     beta = 3.1 ; alpha = 0.16 ; M0 = -19.3
     
     correction = alpha * x1_obs - beta * c_obs + M0 + mB_obs
-        
-    MURES =  correction - df_tensor['MU']
+
+    print("Setting the mean MURES values to around 0.")
+    MURES =  correction - df_tensor['MU'] - torch.mean(correction) + torch.mean(df_tensor['MU'])
     
     return  MURES
 
