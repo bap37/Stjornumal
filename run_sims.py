@@ -183,36 +183,6 @@ if __name__ == "__main__":
         else:
             df, dfdata = load_data(simfilename, datfilename)
 
-            ISATLAS = True
-            if ISATLAS:
-                print("Is ATLAS! Adding the cuts Jacques suggested.")
-
-                mask = (
-                    df['x1'].between(-3, 3)
-                    & df['c'].between(-0.3, 0.8)
-                    & (df['x1ERR'] < 1.0)
-                    & (df['cERR'] < 0.1)
-                    & (df['PKMJDERR'] < 2.0 if 'PKMJDERR' in df.columns else True)
-                    & (df['FITPROB'] > 0.001)
-                    & (df['MWEBV'] < 0.25)
-                    & (df['zHELERR'] <= 2e-5)
-                )
-
-                df = df[mask]
-
-                mask = (
-                    dfdata['x1'].between(-3, 3)
-                    & dfdata['c'].between(-0.3, 0.8)
-                    & (dfdata['x1ERR'] < 1.0)
-                    & (dfdata['cERR'] < 0.1)
-                    & (dfdata['PKMJDERR'] < 2.0 if 'PKMJDERR' in dfdata.columns else True)
-                    & (dfdata['FITPROB'] > 0.001)
-                    & (dfdata['MWEBV'] < 0.25)
-                    & (dfdata['zHELERR'] <= 2e-5)
-                )
-
-                dfdata = dfdata[mask]
-
             print("Adding 'broad' MURES now. ")
             parameters_to_condition_on.remove("MURES")
 
