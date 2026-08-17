@@ -10,6 +10,7 @@ param_names:
 selection_parameters:
     parameters: ['HOST_MAG_r']
     n_coeff: 10
+    range: [18,26]
 
 parameters_to_condition_on:
     ['c', 'mB', 'x1', 'zHD', 'cERR', 'mBERR', 'x1ERR', 'MU', 'HOST_LOGMASS', 'MURES']

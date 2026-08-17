@@ -923,30 +923,24 @@ def create_knots(infos):
     import pandas as pd
 
     parameters_to_condition_on = infos['parameters_to_condition_on']
-    datfilename = infos['Data_File'][0]
 
     if infos.get('selection_parameters'):
-    
-        selection_parameters = infos['selection_parameters']['parameters']
-        n_coeff = infos['selection_parameters']['n_coeff']
-        
-        dfdata = pd.read_csv(
-            datfilename,
-            comment="#",
-            sep=r'\s+'
-        )
-    
-        # Remove invalid selection values
-        for param in selection_parameters:
-            dfdata = dfdata.loc[dfdata[param] > 0]
-    
+
+        try:
+            selection_parameters = infos['selection_parameters']['parameters']
+            n_coeff = infos['selection_parameters']['n_coeff']
+            upper = infos['selection_parameters']['range'][1]
+            lower = infos['selection_parameters']['range'][0]
+        except KeyError:
+            print("You are missing a key parameter for selection effects. I expect parameters, n_coeff, and range !")
+            print(f"You gave me {infos}.")
+            quit()
+
         # Build an independent knot grid for each selection parameter
         knot_lists = {}
     
         for param in selection_parameters:
-            lower = np.amin(dfdata[param].values)
-            upper = np.amax(dfdata[param].values)
-    
+
             knot_lists[param] = np.linspace(
                 lower,
                 upper,
