@@ -778,6 +778,7 @@ def unspool_labels(
             labels.append(r"$\sigma_{\rm int}$")
         return labels
 
+
     # -------------------------------------------------
     # Non-mixture
     # -------------------------------------------------
@@ -978,8 +979,8 @@ def add_distance(df_tensor):
     
     correction = alpha * x1_obs - beta * c_obs + M0 + mB_obs
 
-    print("Setting the mean MURES values to around 0.")
-    MURES =  correction - df_tensor['MU'] - torch.mean(correction) + torch.mean(df_tensor['MU'])
+    #print("Setting the mean MURES values to around 0.")
+    MURES =  correction - df_tensor['MU'] #- torch.mean(correction) + torch.mean(df_tensor['MU'])
     
     return  MURES
 
