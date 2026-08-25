@@ -254,12 +254,21 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
     selection_basis = {}
 
     if "SELECTION" in param_names:
+
+        M0_to_add = ['MURES', 'mB', 'MU']
+        M0_indices = torch.tensor(
+            [parameters_to_condition_on.index(c) for c in steps_to_add],
+            dtype=torch.long,
+            device=device
+        )
+
         n_coeffs = selection_dict["n_coeff"]
+        lowval, highval = selection_dict['range']
 
         for param in selection_dict["parameters"]:
 
-            xmin = torch.amin(df_tensor[param]).item()
-            xmax = torch.amax(df_tensor[param]).item()
+            xmin = lowval
+            xmax = highval
 
             selection_basis[param] = build_bspline_basis(
                 df_tensor[param],
@@ -401,8 +410,8 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
         if 'SELECTION' in param_names:
             n_coeff = selection_dict["n_coeff"]
 
-            extra_priors = (n_coeff * len(selection_dict["parameters"]))
-            selection_theta = theta[:, -extra_priors:]
+            extra_priors = (n_coeff * len(selection_dict["parameters"])) + 1 
+            selection_theta = theta[:, -extra_priors:-1]
 
             for n, param in enumerate(selection_dict["parameters"]):
 
@@ -415,12 +424,6 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
         else:
             extra_priors = 0
 
-        #Need to add stuff in here to do selection function determination ! 
-        #if SELECTION in param_names CHECK
-        #calculate the number of parameters and find their location (always last) CHECK 
-        #pass along to a function that builds the spline and does selection on it
-        #return joint weights
-        #also inform where STEP/SCATTER are ... 
 
         # --- Normalise ---
         weight_sum = joint_weights.sum(dim=1, keepdim=True)  # (B, 1)
@@ -459,9 +462,8 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
 
         # --- Batched output tensor indexing ---
         result = output_stack[resampled_idx]  # (B, n_target, n_features)
-
-        #BRODIE NOTE 
-        #Need to fix this ... change hard-coded values :(
+ 
+        #BRODIE Note: These parameters are hard-coded to their positions. Not ideal, but I've not found a better way. 
         if "STEP" in param_names:
             if "SCATTER" in param_names:
                 temp_index = -2-extra_priors
@@ -478,13 +480,12 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
                 gamma = theta[:, temp_index].unsqueeze(1)   
                 y = result[:, :, y_idx]  
                 step = torch.where(y < step_threshold, -gamma/2, gamma/2)  # (B, n_target)
-                result[:, :, step_indices]+= step.unsqueeze(-1)
+                result[:, :, step_indices]+= M0_OFF.unsqueeze(-1)
 
 
         #Then if grey scatter is enabled, add it to this nonsense.            
         if "SCATTER" in param_names:
             temp_index = -1-extra_priors
-            #temp_index = param_names.index("SCATTER")
             scatter = theta[:, temp_index].view(-1, 1, 1)
             scatter = torch.clamp(scatter, min=1e-6)
             noise = torch.randn(
@@ -495,6 +496,12 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
             noise = noise.expand(-1, -1, len(scatter_indices))
 
             result[:, :, scatter_indices] += noise
+
+        if "SELECTION" in param_names: #When doing selection, M0 offset should be the last entry ever. 
+            temp_index = -1
+            M0_OFF = theta[:, temp_index].unsqueeze(1)   
+            result[:, :, M0_indices] += M0_OFF.unsqueeze(-1)
+
 
         # --- Fill bad simulations with NaN ---
         result[bad_mask] = float('nan')
@@ -693,7 +700,7 @@ def unspool_labels(
     """
 
     function_dict_, split_dict, priors_dict, _, selection_dict = dicts
-
+    
     def expand_labels(names, tag=None):
         labels = []
 
@@ -779,6 +786,14 @@ def unspool_labels(
             labels.append(r"$\sigma_{\rm int}$")
         return labels
 
+    def expand_selection(names):
+        labels = []
+        if "SELECTION" in names:
+            for s in range(selection_dict['n_coeff']):
+                labels.append(f"SEL {s}")
+            labels.append("M0 Offset")
+        return labels
+
     # -------------------------------------------------
     # Non-mixture
     # -------------------------------------------------
@@ -787,7 +802,7 @@ def unspool_labels(
     print("Please check labels if using a weird linear function or stepwise!")
 
     if not mixture:
-        return expand_labels(params_to_fit) + expand_special(params_to_fit)
+        return expand_labels(params_to_fit) + expand_special(params_to_fit) + expand_selection(infos['param_names'])
 
     # -------------------------------------------------
     # Mixture
@@ -1407,6 +1422,11 @@ def build_special_priors(param_names, dicts, knot_list=None, selection_parameter
                     high=torch.tensor([5], dtype=torch.float32, device=device)
                 )
                 list_o_priors.append(selection_prior)
+        M0_prior = BoxUniform(
+                    low=torch.tensor([-.2], dtype=torch.float32, device=device),
+                    high=torch.tensor([0.2], dtype=torch.float32, device=device)
+                )
+        list_o_priors.append(M0_prior)
 
     return list_o_priors
 
