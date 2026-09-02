@@ -177,10 +177,10 @@ if __name__ == "__main__":
         if infos['Skysurvey']:
             print("Detected a request to use Skysurvey! Switching over; please note that we are disabling a lot of features in the yml now!")
             is_skysurvey = True
-            df, dfdata = load_data(simfilename, datfilename)
+            df, dfdata = load_data(simfilename, datfilename, infos)
             
         else:
-            df, dfdata = load_data(simfilename, datfilename)
+            df, dfdata = load_data(simfilename, datfilename, infos)
 
             print("Adding 'broad' MURES now. ")
             parameters_to_condition_on.remove("MURES")

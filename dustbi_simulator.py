@@ -214,13 +214,6 @@ def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
 
     #And a quick cleaning to ensure valid magnitudes ! 
 
-    if 'SELECTION' in param_names:
-        for select in selection_dict['parameters']:
-            df = df.loc[df[select] > 0]
-        print("Cutting out bad peak magnitudes... This may cause a problem. Flagging it ! ")
-
-    #print(all_cols)
-    
     df_tensor = {
         col: torch.tensor(df[col].to_numpy(), dtype=torch.float32, device=device)
         for col in all_cols
@@ -993,7 +986,7 @@ def add_distance(df_tensor):
     return  MURES
 
 
-def load_data(simfilename, datfilename):
+def load_data(simfilename, datfilename, infos=None):
 
     from astropy.cosmology import Planck18
     import numpy as np
@@ -1020,6 +1013,11 @@ def load_data(simfilename, datfilename):
     print("Ensuring only valid log masses.")
     dfdata = dfdata.loc[dfdata.HOST_LOGMASS > 0]
     df = df.loc[df.HOST_LOGMASS > 0 ]
+
+    if infos['selection_parameters']:
+        for param in infos['selection_parameters']['parameters']:
+            df = df.loc[df[param] > 0]
+            dfdata = dfdata.loc[dfdata[param] > 0]
 
     return df, dfdata
 
