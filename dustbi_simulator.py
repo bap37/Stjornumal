@@ -1141,6 +1141,13 @@ def simulate_model(n_sim, n_batch, sims_savename, priors, simulator, inference, 
     return theta_valid, p_vals
 
 
+def save_output(labels, theta_hat, filename):
+    with open(filename, "w") as f:
+        for i in range(len(labels)):
+            string = f"{labels[i]},{theta_hat[i]:.4f}"
+            string = string+"\n"      
+            f.write(string)
+    
 
 
 ##########################
