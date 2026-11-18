@@ -5,526 +5,11 @@ from sbi.utils import MultipleIndependent
 import numpy as np
 from sbi.utils import BoxUniform
 from Functions import *
-#import pyro
-#import pyro.distributions as dist
-#from pyro.infer import MCMC, NUTS
-#from pyro.infer.autoguide.initialization import init_to_median
-
-#Create the layout function to describe input parameters theta
-
-from dataclasses import dataclass
-
-@dataclass
-class ThetaLayout:
-    slices: dict
-    idx: dict
-    counts: dict
-    n_params: dict
-    order: dict
-
-def build_theta_layout(counts, n_params):
-
-    slices = {}
-    idx = 0
-
-    for dist in counts:
-
-        width = counts[dist] * n_params[dist]
-        slices[dist] = slice(idx, idx + width)
-        idx += width
-
-    return slices
-
-    
-def build_layout(param_names, dicts):
-
-    function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts
-
-    idx = {
-        "gauss": [],
-        "delta": [],
-        "gauss_EVOL": [],
-        "exp": [],
-        "exp_EVOL": [],
-        "gamma": [],
-        "lognormal": [],
-        "double_gaussian": [],
-        "linear": [],
-        "stepwise": [],
-        "logistic": [],
-    }
-
-    order = {
-        "gauss": [],
-        "delta": [],
-        "gauss_EVOL": [],
-        "exp": [],
-        "exp_EVOL": [],
-        "gamma": [],
-        "lognormal": [],
-        "double_gaussian": [],
-        "linear": [],
-        "stepwise": [],
-        "logistic": [],
-    }
-
-    params_to_avoid = ['STEP', 'SCATTER', 'SELECTION']
-
-    for i, name in enumerate(param_names):
-
-        base = name.split("_HIGH_")[0]
-
-        if base in params_to_avoid:
-            continue
-
-        if "Truncated" in base:
-            base = base.replace("Truncated", "")
-        
-        try:
-            funcname = function_dict[base].__name__
-        except KeyError:
-            AssertionError(f"I didn't understand how to parse {base}; please ensure it's parsed correctly")
-
-        #Man this is getting cursed.
-        if ("Gaussian" in funcname) and ("EVOL" not in funcname) and (funcname != "DistDoubleGaussian"):
-            idx["gauss"].append(i)
-            order["gauss"].append(name)
-
-        elif funcname == "DistDelta":
-            idx["delta"].append(i)
-            order["delta"].append(name)
-
-        elif funcname == "DistGaussian_EVOL":
-            idx["gauss_EVOL"].append(i)
-            order["gauss_EVOL"].append(name)
-
-        elif funcname == "DistExponential":
-            idx["exp"].append(i)
-            order["exp"].append(name)
-
-        elif funcname == "DistExponential_EVOL":
-            idx["exp_EVOL"].append(i)
-            order["exp_EVOL"].append(name)
-
-        elif funcname == "DistGamma":
-            idx["gamma"].append(i)
-            order["gamma"].append(name)
-
-        elif "LogNormal" in funcname:
-            idx["lognormal"].append(i)
-            order["lognormal"].append(name)
-
-        elif "Double" in funcname:
-            idx["double_gaussian"].append(i)
-            order["double_gaussian"].append(name)
-
-        elif "Linear" in funcname:
-            idx["linear"].append(i)
-            order["linear"].append(name)
-
-        elif "Stepwise" in funcname:
-            idx["stepwise"].append(i)
-            order["stepwise"].append(name)
-
-        elif "Logistic" in funcname:
-            idx["logistic"].append(i)
-            order["logistic"].append(name)
-
-
-        else:
-            AssertionError(f"You have passed {funcname}, which I don't recognise")
-
-    counts = {k: len(v) for k, v in idx.items()}
-
-    n_params = {
-        "gauss": 2,
-        "gauss_EVOL":3,
-        "delta":1,
-        "exp": 1,
-        "exp_EVOL": 2,
-        "gamma": 2,
-        "lognormal": 2,
-        "double_gaussian": 5,
-        "linear": 2,
-        "stepwise": 1,
-        "logistic": 3,
-    }
-
-    slices = build_theta_layout(counts, n_params)
-
-    return ThetaLayout(
-        slices=slices,
-        idx=idx,
-        counts=counts,
-        n_params=n_params,
-        order=order
-    )    
 
 
 #######################
 ## BEGIN SIMULATOR
 #######################
-
-
-
-def compute_split_positions(layout, shared_params=None):
-    """Return scalar indices within a single-population theta block for parameters
-    that are NOT in ``shared_params`` (i.e. parameters that get independent Pop B values).
-
-    ``_HIGH_`` twins and ``_EVOL`` slopes are handled automatically because
-    ``layout.order`` already expands ``_HIGH_`` entries, and the EVOL slope is
-    absorbed into ``layout.n_params[dist]`` (e.g. ``gauss_EVOL`` has n_params=3).
-
-    When ``shared_params`` is None or empty, every position is returned — i.e.
-    ``len(result) == n_pop_params``, matching the current all-split behaviour.
-    """
-    split_positions = []
-    shared_set = set(shared_params or [])
-    for dist, sl in layout.slices.items():
-        if layout.counts[dist] == 0:
-            continue
-        offset = sl.start
-        n_param = layout.n_params[dist]
-        for i, name in enumerate(layout.order[dist]):
-            base = name.split("_HIGH_")[0]
-            if base in shared_set:
-                continue
-            split_positions.extend(range(offset + i * n_param, offset + (i + 1) * n_param))
-    return split_positions
-
-
-def make_batched_simulator(layout, df, param_names, parameters_to_condition_on,
-                           dicts, dfdata, sub_batch=40, device="cpu", debug=False,
-                           mixture=False, split_positions=None):
-    function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts
-    validate_order(param_names, dicts)
-
-    params_to_avoid = ['STEP', 'SCATTER', 'EVOL', 'SELECTION']
-    
-    splits = list({v[1] for v in split_dict.values()})
-    
-    # Pre-compute ALL tensor columns ONCE
-    all_cols = list(set(list(priors_dict.keys()) + splits + parameters_to_condition_on))
-    
-    # Remove anything that contains any of the substrings
-    all_cols = [
-        col for col in all_cols
-        if not any(substr in col for substr in params_to_avoid)
-    ]
-
-    #And a quick cleaning to ensure valid magnitudes ! 
-
-    if 'SELECTION' in param_names:
-        for select in selection_dict['parameters']:
-            df = df.loc[df[select] > 0]
-        print("Cutting out bad peak magnitudes... This may cause a problem. Flagging it ! ")
-
-    #print(all_cols)
-    
-    df_tensor = {
-        col: torch.tensor(df[col].to_numpy(), dtype=torch.float32, device=device)
-        for col in all_cols
-    }
-    
-    # Pre-stack output columns for fast batched indexing
-    output_stack = torch.stack(
-        [df_tensor[col] for col in parameters_to_condition_on], dim=-1
-    )  # (N, n_features)
-
-    if "STEP" in param_names:
-    #Calculate indices for things that need the "mass" step added to them. 
-        steps_to_add = ['MURES', 'mB']
-        step_indices = torch.tensor(
-            [parameters_to_condition_on.index(c) for c in steps_to_add],
-            dtype=torch.long,
-            device=device
-        )
-
-        y_idx = parameters_to_condition_on.index(split_dict["STEP"][1])
-        step_threshold = split_dict["STEP"][2]
-
-    if "SCATTER" in param_names:
-        steps_to_add = ['MURES', 'mB']
-        scatter_indices = torch.tensor(
-            [parameters_to_condition_on.index(c) for c in steps_to_add],
-            dtype=torch.long,
-            device=device
-        )
-
-    selection_basis = {}
-
-    if "SELECTION" in param_names:
-        n_coeffs = selection_dict["n_coeff"]
-
-        for param in selection_dict["parameters"]:
-
-            xmin = torch.amin(df_tensor[param]).item()
-            xmax = torch.amax(df_tensor[param]).item()
-
-            selection_basis[param] = build_bspline_basis(
-                df_tensor[param],
-                xmin,
-                xmax,
-                n_coeffs,
-            )
-
-    N = len(df)
-    n_target = len(dfdata)
-
-    # Mixture mode: compute how many params per population
-    if mixture:
-        n_pop_params = sum(layout.counts[d] * layout.n_params[d] for d in layout.counts)
-        # Default: everything is split (current behaviour) when no shared params provided
-        if split_positions is None:
-            split_positions = list(range(n_pop_params))
-        n_split = len(split_positions)
-        f_idx = n_pop_params + n_split
-        # Pre-build index tensor on training device for fast scatter into theta_B
-        split_idx_tensor = torch.as_tensor(split_positions, dtype=torch.long, device=device) \
-            if n_split < n_pop_params else None
-
-    def _compute_joint_weights(theta_pop, B, dev, extra_tensors=None):
-        """Compute importance weights for a single population's parameters."""
-        joint_weights = torch.ones(B, N, device=dev)
-        high_flag = False
-
-        for dist in layout.slices:
-            if layout.counts[dist] == 0:
-                continue
-            if dist == "delta":
-                continue
-            
-            theta_dist = theta_pop[:, layout.slices[dist]]
-            n_param = layout.n_params[dist]
-            theta_dist = theta_dist.view(B, layout.counts[dist], n_param)
-
-            for i in range(layout.counts[dist]):
-                name = layout.order[dist][i]
-                #print(name, theta_dist)
-                if "_EVOL" in name:
-                    name = name.split("_EVOL_")[0]
-
-                if "_HIGH_" in name:
-                    name = name.split("_HIGH_")[0]
-                    high_flag = True
-
-                theta_i = theta_dist[:, i, :]
-                if extra_tensors and name in extra_tensors:
-                    x = extra_tensors[name]  # (B, N)
-                else:
-                    x = df_tensor[name]      # (N,)
-                if x.ndim == 1:
-                    x = x.unsqueeze(0)  # (1, N)
-                batch_size = B
-                correlation = df_tensor.get(corr_dict.get(name)) if corr_dict.get(name) else None
-
-                try:
-                    steptype, split_param, split_val = split_dict[name]
-                except KeyError:
-                    steptype, split_param, split_val = None, None, None
-
-                if (name in split_dict) & (steptype == "Stepwise"):
-                    split_tensor = df_tensor[split_param]
-
-                    if high_flag:
-                        mask = split_tensor >= split_val
-                        high_flag = False
-                    else:
-                        mask = split_tensor < split_val
-
-                    weights = torch.ones(batch_size, N, device=dev)
-
-                    x_sub = x[:,mask]
-                    density_sub = function_dict[name](x_sub, theta_i, correlation)
-                    density_sub = torch.clamp(density_sub, min=0.0)
-
-                    if density_sub.ndim == 1:
-                        density_sub = density_sub.unsqueeze(0)
-                    weights[:, mask] = density_sub
-
-                else:
-                    density = function_dict[name](x, theta_i, correlation)
-                    weights = torch.clamp(density, min=0.0)
-
-                if weights.ndim == 1:
-                    weights = weights.unsqueeze(0)
-
-                joint_weights *= weights
-
-        return joint_weights
-
-    def _simulate_sub_batch(theta):
-        """Fully batched: theta is (B, n_params), returns (B, n_target, n_features)."""
-        if theta.ndim == 1:
-            theta = theta.unsqueeze(0)
-        B = theta.shape[0]
-        dev = theta.device
-
-        mu = None
-        # Identify delta parameters
-        if layout.counts["delta"] > 0:
-            theta_delta = theta[:, layout.slices["delta"]]
-            theta_delta = theta_delta.view(B, layout.counts["delta"], layout.n_params["delta"])
-            for i in range(layout.counts["delta"]):
-                name = layout.order["delta"][i]
-                theta_i = theta_delta[:, i, :]  # (B, 1)
-
-                if name == "SIM_beta":  # or whatever your key is
-                    mu = add_beta_distance(df_tensor, theta_i)  # (B, N)
-
-
-        # --- Build kwargs cleanly ---
-        extra_tensors = {}
-        if mu is not None:
-            extra_tensors["MU"] = mu
-        
-                
-        if mixture:
-            theta_A = theta[:, :n_pop_params]
-            if split_idx_tensor is None:
-                # Fast path: all params split (original mixture behaviour)
-                theta_B = theta[:, n_pop_params:2 * n_pop_params]
-            else:
-                # Some params shared: clone pop A and overwrite the split positions
-                # with pop B's values from the compact pop_B_split block.
-                theta_B_split = theta[:, n_pop_params:n_pop_params + n_split]
-                theta_B = theta_A.clone()
-                theta_B[:, split_idx_tensor.to(theta.device)] = theta_B_split
-            f = theta[:, f_idx].unsqueeze(1)  # (B, 1)
-            weights_A = _compute_joint_weights(theta_A,B,dev,extra_tensors=extra_tensors)
-            weights_B = _compute_joint_weights(theta_B,B,dev,extra_tensors=extra_tensors)
-            joint_weights = (f * weights_A+ (1 - f) * weights_B)
-        else:
-            joint_weights = _compute_joint_weights(theta, B, dev, extra_tensors=extra_tensors)
-
-        #BRODIE NOTE 
-        if 'SELECTION' in param_names:
-            n_coeff = selection_dict["n_coeff"]
-
-            extra_priors = (n_coeff * len(selection_dict["parameters"]))
-            selection_theta = theta[:, -extra_priors:]
-
-            for n, param in enumerate(selection_dict["parameters"]):
-
-                start = n * n_coeff ; end = (n + 1) * n_coeff
-                coeffs = selection_theta[:, start:end]
-
-                weights = Selection_Spline(df_tensor[param], coeffs, selection_basis[param])
-                joint_weights *= weights
-
-        else:
-            extra_priors = 0
-
-        #Need to add stuff in here to do selection function determination ! 
-        #if SELECTION in param_names CHECK
-        #calculate the number of parameters and find their location (always last) CHECK 
-        #pass along to a function that builds the spline and does selection on it
-        #return joint weights
-        #also inform where STEP/SCATTER are ... 
-
-        # --- Normalise ---
-        weight_sum = joint_weights.sum(dim=1, keepdim=True)  # (B, 1)
-        bad_mask = (weight_sum.squeeze(1) == 0)
-
-        joint_weights[bad_mask] = 1.0
-        weight_sum = torch.where(weight_sum == 0, torch.tensor(float(N), device=dev), weight_sum)
-        normalized_weights = joint_weights / weight_sum
-
-        # --- ESS check: mark low-ESS draws as bad ---
-        ess = 1.0 / torch.sum(normalized_weights ** 2, dim=1)  # (B,)
-        bad_mask = bad_mask | (ess < n_target)
-
-        if mixture:
-            # Draw latent population assignments
-            # True  -> Population A
-            # False -> Population B
-            pop_choice = torch.bernoulli(
-                f.expand(-1, n_target)
-            ).bool()
-
-            # Normalize each population independently
-            norm_A = weights_A / weights_A.sum(dim=1, keepdim=True)
-            norm_B = weights_B / weights_B.sum(dim=1, keepdim=True)
-
-            # Sample indices independently from each population
-            idx_A = torch.multinomial(norm_A,num_samples=n_target,replacement=True)
-            idx_B = torch.multinomial(norm_B,num_samples=n_target,replacement=True)
-            resampled_idx = torch.where(pop_choice,idx_A,idx_B)
-        else:
-            resampled_idx = torch.multinomial(
-                normalized_weights,
-                num_samples=n_target,
-                replacement=True
-            )
-
-        # --- Batched output tensor indexing ---
-        result = output_stack[resampled_idx]  # (B, n_target, n_features)
-
-        #BRODIE NOTE 
-        #Need to fix this ... change hard-coded values :(
-        if "STEP" in param_names:
-            if "SCATTER" in param_names:
-                temp_index = -2-extra_priors
-            else:
-                temp_index = -1-extra_priors
-            #temp_index = param_names.index("STEP")
-            if mixture:
-                gamma = theta[:, temp_index].view(-1, 1, 1)
-                step = torch.where(pop_choice.unsqueeze(-1),gamma / 2,  -gamma / 2)
-                for idx in step_indices.tolist():
-                    result[:, :, idx] += step.squeeze(-1)
-
-            else:
-                gamma = theta[:, temp_index].unsqueeze(1)   
-                y = result[:, :, y_idx]  
-                step = torch.where(y < step_threshold, -gamma/2, gamma/2)  # (B, n_target)
-                result[:, :, step_indices]+= step.unsqueeze(-1)
-
-
-        #Then if grey scatter is enabled, add it to this nonsense.            
-        if "SCATTER" in param_names:
-            temp_index = -1-extra_priors
-            #temp_index = param_names.index("SCATTER")
-            scatter = theta[:, temp_index].view(-1, 1, 1)
-            scatter = torch.clamp(scatter, min=1e-6)
-            noise = torch.randn(
-                result.shape[0], result.shape[1], 1,
-                device=result.device
-            ) * scatter
-
-            noise = noise.expand(-1, -1, len(scatter_indices))
-
-            result[:, :, scatter_indices] += noise
-
-        # --- Fill bad simulations with NaN ---
-        result[bad_mask] = float('nan')
-
-        if debug:
-            dft = df.iloc[resampled_idx.squeeze(0)]
-            if layout.counts["delta"] > 0:
-                theta_delta = theta[:, layout.slices["delta"]]
-                theta_delta = theta_delta.view(B, layout.counts["delta"], layout.n_params["delta"])
-                theta_delta = theta_delta[:, 0, :]  # (B, 1)
-                dft['SIM_beta'] = theta_delta.item()  # extract scalar
-            return dft
-
-        return result
-
-    
-    def batched_simulator(theta_batch):
-        """Process theta_batch in sub-batches to control memory."""
-        B = theta_batch.shape[0]
-        if B <= sub_batch:
-            return _simulate_sub_batch(theta_batch)
-
-        results = []
-        for start in range(0, B, sub_batch):
-            end = min(start + sub_batch, B)
-            results.append(_simulate_sub_batch(theta_batch[start:end]))
-        return torch.cat(results, dim=0)
-
-    return batched_simulator
-
 
 
 #####################
@@ -591,250 +76,6 @@ def preprocess_input_distribution(df, cols):
     }
 
 
-def parameter_generation(list_of_parameter_names, dicts):
-    
-    empty_list = []
-    function_dict, split_dict, priors_dict, corr_dict, selection_dicts = dicts
-    
-    for name in list_of_parameter_names:
-        if name == "SELECTION": continue
-        if name in split_dict.keys():
-            evol_type = (split_dict[name][0])
-            if evol_type == 'Stepwise':
-                if name == "STEP":  #hacky
-                    pass
-                else:
-                    split = (split_dict[name][1])
-                    #print(name,split)
-                    empty_list.append(name+"_HIGH_"+split)
-        empty_list.append(name)
-    return empty_list
-
-
-def validate_step(param_names, params_to_avoid):
-    # Extract only the special params that are present
-    present = [p for p in params_to_avoid if p in param_names]
-
-    if not present:
-        return  # nothing to check
-
-    # Get their positions in param_names
-    indices = [param_names.index(p) for p in present]
-
-    # --- Check they are at the end ---
-    expected_indices = list(range(len(param_names) - len(present), len(param_names)))
-    if indices != expected_indices:
-        raise ValueError(
-            f"{present} must appear at the end of param_names in order {params_to_avoid}"
-        )
-
-    # --- Check order is correct ---
-    if present != sorted(present, key=params_to_avoid.index):
-        raise ValueError(
-            f"{present} are not in the correct order {params_to_avoid}"
-        )
-
-def validate_order(param_names, dicts): 
-    """
-    Catchall error trapping function to be called during initialisation. 
-    """
-    function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts    
-
-    params_to_avoid = ["STEP", "SCATTER"]
-
-    validate_step(param_names, params_to_avoid)
-
-    #Adding SELECTION in because it can be treated as a regular parameter for this purpose.
-    params_to_avoid += ["SELECTION"]
-
-    #Will need to add other functions in as they are implemented
-    order_priority = {
-        DistGaussian: 2,
-        DistTruncatedGaussian: 2,
-        DistDelta:2,
-        DistGaussian_EVOL:3,
-        DistExponential: 4,
-        DistExponential_EVOL: 5,
-        DistGamma: 6,
-        DistDoubleGaussian: 7,
-        DistLogistic: 8,
-    }
-
-    #Temporarily strip "step" from param names, since it's implemented differently.
-    new_list = [x for x in param_names if x not in params_to_avoid] 
-    priorities = [order_priority[function_dict[p]] for p in new_list]
-
-    #Make sure that all entries are in the correct order
-    if priorities != sorted(priorities):
-        raise ValueError(f"Please ensure that the parameters are give in the following order: {order_priority.values}")
-
-    #check to make sure that we don't have a split and Correlation enabled at the same time 
-    conflicts = [k for k in split_dict if k in corr_dict and corr_dict[k] != 'None']
-    for k in conflicts:
-        if "EVOL" not in function_dict[k].__name__:
-            raise ValueError(f"Conflict detected for keys: {conflicts}")
-        else: 
-            print(f"Found that there is a split and correlation entry for {conflicts}. Continuing.")
-
-    return True
-
-
-def unspool_labels(
-    param_names,
-    dicts,
-    latex_dict,
-    function_dict,
-    mixture=False,
-    infos=None
-):
-    """
-    Generate labels in EXACT same order as priors.
-    """
-
-    function_dict_, split_dict, priors_dict, _, selection_dict = dicts
-
-    def expand_labels(names, tag=None):
-        labels = []
-
-        for name in names:
-            if name in ['EVOL', 'STEP', 'SCATTER']:
-                continue
-
-            base_name = name
-            high_flag = False
-
-            if "_HIGH_" in base_name:
-                base_name = base_name.split("_HIGH_")[0]
-                high_flag = True
-
-            func_name = function_dict_[base_name].__name__
-
-            try:
-                pname = latex_dict[base_name]
-                func_params = latex_dict[func_name]
-            except KeyError:
-                raise ValueError(f"Missing latex entry for {base_name} or {func_name}")
-
-            def add(params):
-                for p in params:
-                    label = f"{pname} {p}"
-                    if high_flag:
-                        label = f"{pname} Hi {p}"
-                    if tag:
-                        label += f" ({tag})"
-                    labels.append(label)
-
-            # ---- Mirror prior expansion exactly ----
-
-            if ("Gaussian" in func_name) and (func_name != "DistDoubleGaussian"):
-                add(func_params[:2])  # mu, sigma
-
-#                if base_name in split_dict:
-#                    evol_type = split_dict[base_name][0]
-#                    if evol_type == "Stepwise":
-#                        add(func_params[:2])
-#                    elif evol_type == "Linear":
-#                        add([r"$m$"])  # slope (you may want a better latex)
-
-            elif "DistDelta" in func_name:
-                add(func_params[:1])
-
-            elif "DistExponential" in func_name:
-                add(func_params[:1])
-
-#                if base_name in split_dict:
-#                    evol_type = split_dict[base_name][0]
-#                    if evol_type == "Stepwise":
-#                        add(func_params[:1])
-#                    elif evol_type == "Linear":
-#                        add([r"$m$"])
-
-            elif func_name == "DistDoubleGaussian":
-                add(func_params[:5])
-
-                if base_name in split_dict:
-                    evol_type = split_dict[base_name][0]
-                    if evol_type == "Stepwise":
-                        add(func_params[:5])
-                    elif evol_type == "Linear":
-                        add([r"$m$"])
-
-            elif func_name == "DistLogistic":
-                add(func_params[:3])
-
-            elif func_name == "DistGamma":
-                add(func_params[:2])
-
-            else:
-                raise ValueError(f"Unknown function {func_name}")
-
-        return labels
-
-    def expand_special(names):
-        labels = []
-        if "STEP" in names:
-            labels.append(r"$\gamma$")
-        if "SCATTER" in names:
-            labels.append(r"$\sigma_{\rm int}$")
-        return labels
-
-
-    # -------------------------------------------------
-    # Non-mixture
-    # -------------------------------------------------
-    params_to_fit = parameter_generation(param_names, dicts)
-
-    print("Please check labels if using a weird linear function or stepwise!")
-
-    if not mixture:
-        return expand_labels(params_to_fit) + expand_special(params_to_fit)
-
-    # -------------------------------------------------
-    # Mixture
-    # -------------------------------------------------
-    pop_b = infos['Population_B']
-
-    shared_params = [
-        p for p in pop_b.get('shared_params', [])
-        if p not in ('STEP', 'SCATTER')
-    ]
-
-    split_names = [
-        n for n in param_names
-        if n not in shared_params and n not in ('STEP', 'SCATTER')
-    ]
-
-    # Pop A (full)
-    labels_A = expand_labels(param_names, tag="A")
-
-    # Pop B (split only)
-    labels_B = expand_labels(split_names, tag="B")
-
-    # Mixing
-    mix_label = [r"$f_{\mathrm{mix}}$"]
-
-    # Special (always last)
-    labels_special = expand_special(param_names)
-
-    return labels_A + labels_B + mix_label + labels_special
-
-
-def split_outputs(output_distribution, split_tensor, split_val, param_list):
-    """
-    Splits the output tensors to return 4 parameters instead of 2; assumes that split_dict always splits on the same parameter.
-    """
-    mask_high = split_tensor >= split_val
-    mask_low  = ~mask_high
-
-    out = []
-    for p in param_list:
-        v = output_distribution[p]
-        out.extend([
-            torch.where(mask_low,  v, torch.zeros_like(v)),
-            torch.where(mask_high, v, torch.zeros_like(v))
-        ])
-
-    return torch.stack(out, dim=-1)
 
 def check_special_inputs(infos):
     try: 
@@ -879,9 +120,9 @@ def load_kestrel(filename):
         "DistDoubleGaussian": DistDoubleGaussian,
         "DistGaussian_EVOL": DistGaussian_EVOL,
         "DistExponential_EVOL": DistExponential_EVOL,
-        "DistTruncatedGaussian": DistTruncatedGaussian,
-        "DistDelta": DistDelta,
         "DistGamma": DistGamma,
+        "DistIdentity": DistIdentity,
+        "host_step":host_step,
     }
 
 
@@ -889,6 +130,7 @@ def load_kestrel(filename):
         raw_yaml = yaml.safe_load(file)
 
     raw_yaml['param_names'] = raw_yaml['param_names'].split(" ")
+    raw_yaml['nuisance_parameters'] = raw_yaml['nuisance_parameters'].split(" ")
         
     raw_yaml['Data_File'] = raw_yaml['Data_File'].split(" ")
     raw_yaml['Simbank_File'] = raw_yaml['Simbank_File'].split(" ")
@@ -918,6 +160,242 @@ def load_kestrel(filename):
         pop_b['mixing_prior'] = ast.literal_eval(pop_b['mixing_prior'])
 
     return raw_yaml
+
+
+def add_distance(df_tensor):
+    
+    x1_obs = df_tensor['x1'] ; c_obs = df_tensor['c'] ; mB_obs = df_tensor['mB']
+    
+    beta = 3.1 ; alpha = 0.16 ; M0 = -19.3
+    
+    correction = alpha * x1_obs - beta * c_obs + M0 + mB_obs
+
+    #print("Setting the mean MURES values to around 0.")
+    MURES =  correction - df_tensor['MU'] #- torch.mean(correction) + torch.mean(df_tensor['MU'])
+    
+    return  MURES
+
+
+def load_data(simfilename, datfilename):
+
+    from astropy.cosmology import Planck18
+    import numpy as np
+    import pandas as pd
+    df = pd.read_csv(simfilename, comment="#", sep='\s+')
+
+    df['SIM_EBV'] = df.SIM_AV/df.SIM_RV
+    df['MU'] = Planck18.distmod(df.zHD.values).value
+
+
+    
+    dfdata = pd.read_csv(datfilename, 
+                             comment="#", sep=r'\s+')
+    dfdata['MU'] = Planck18.distmod(dfdata.zHD.values).value
+
+    print("Only loading DES Data")
+    #dfdata = dfdata.loc[dfdata.IDSURVEY == 10]
+    #dfdata.loc[dfdata.PROB_SNNV19 < -1., "PROB_SNNV19"] = 1
+    try:
+        dfdata = dfdata.loc[dfdata.PROB_SNNV19 >= 0.5]
+    except AttributeError:
+        print("This file doesn't have 'PROB_SNNV19' as a valid key.")
+
+    print("Ensuring only valid log masses.")
+    dfdata = dfdata.loc[dfdata.HOST_LOGMASS > 0]
+    df = df.loc[df.HOST_LOGMASS > 0 ]
+
+    return df, dfdata
+
+#######################
+## Priors and such ! 
+#######################
+
+
+def prior_generator(infos):
+
+    priors_dict = {}
+
+    params_to_avoid = ['EVOL', 'STEP', 'sigint', 'SELECTION', '2POPS']
+    
+    for name in infos['param_names']:
+        priors_dict[name] = build_distribution_priors(name, infos, device='cpu')
+
+    for name in infos['nuisance_parameters']:
+        try:
+            func_name = infos['Functions'][name].__name__
+        except KeyError:
+            func_name = name 
+        if name == "2POPS":
+            priors_dict['a'] = build_special_priors(name, infos, device='cpu')
+        else:
+            print(name)
+            priors_dict[name] = build_special_priors(name, infos, device='cpu')
+
+    return priors_dict
+
+def build_distribution_priors(name, infos , device='cpu'):
+    """Build the list of BoxUniform priors for distribution parameters.
+    Called one at a time and typically handed to a dictionary for safe keeping. 
+    
+    """
+
+    print("Currently not generating anything for correlations...")
+
+    priors_dict = infos["Priors"]
+        
+    func_name = infos['Functions'][name].__name__
+
+    if func_name == "DistGaussian":
+        mu0, sigma0 = priors_dict[name] 
+        
+        mu_prior, sigma_prior = TwoDBoxPrior(mu0, sigma0, device=device)
+        return MultipleIndependent([mu_prior, sigma_prior])
+
+    elif "DistExponential" in func_name:
+        tau0 = priors_dict[name][0]
+
+        tau_prior = BoxUniform(
+            low= torch.tensor([tau0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([tau0[1]], dtype=torch.float32, device=device)
+                )
+
+        return tau_prior
+
+    elif func_name == "DistDoubleGaussian":
+        mu1, sigma1, mu2, sigma2, a = priors_dict[name]
+
+        mu1_prior = BoxUniform(
+            low= torch.tensor([mu1[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([mu1[1]], dtype=torch.float32, device=device)
+            )
+
+        sigma1_prior = BoxUniform(
+            low= torch.tensor([sigma1[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([sigma1[1]], dtype=torch.float32, device=device)
+            )
+
+        mu2_prior = BoxUniform(
+            low= torch.tensor([mu2[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([mu2[1]], dtype=torch.float32, device=device)
+            )
+
+        sigma2_prior = BoxUniform(
+            low= torch.tensor([sigma2[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([sigma2[1]], dtype=torch.float32, device=device)
+            )
+
+        a_prior = BoxUniform(
+            low= torch.tensor([a[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([a[1]], dtype=torch.float32, device=device)
+            )
+
+        return MultipleIndependent([mu1_prior, sigma1_prior, mu2_prior, sigma2_prior, a_prior])
+
+    elif func_name == "DistLogistic":
+        L0, k0, sigma0 = priors_dict[name]
+        L_prior = BoxUniform(
+            low= torch.tensor([L0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([L0[1]], dtype=torch.float32, device=device)
+            )
+        k_prior = BoxUniform(
+            low= torch.tensor([k0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([k0[1]], dtype=torch.float32, device=device)
+            )
+        sigma_prior = BoxUniform(
+            low= torch.tensor([sigma0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([sigma0[1]], dtype=torch.float32, device=device)
+            )
+        return MultipleIndependent([L_prior, k_prior, sigma_prior])
+
+    elif func_name == "DistGamma":
+        tau0, gamma0 = priors_dict[name]
+        tau_prior = BoxUniform(
+            low= torch.tensor([tau0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([tau0[1]], dtype=torch.float32, device=device)
+            )
+        gamma_prior = BoxUniform(
+            low= torch.tensor([gamma0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([gamma0[1]], dtype=torch.float32, device=device)
+            )
+        return MultipleIndependent([tau_prior, gamma_prior])
+
+    elif func_name == "DistIdentity":
+        ident0 = priors_dict[name][0]
+
+        ident_prior = BoxUniform(
+            low= torch.tensor([ident0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([ident0[1]], dtype=torch.float32, device=device)
+                )
+
+        return ident_prior
+
+    else:
+        AssertionError(f"You passed me {func_name}; I do not recognise this.")
+
+
+def build_special_priors(name, infos, device='cpu'):
+    """Build the list of priors for STEP, SCATTER, SELECTION, and a special key 
+    for the mixing parameter a. """
+
+    priors_dict = infos["Priors"]
+
+    #knot_list=None, selection_parameters=None
+
+    if "gammaDM" in name:
+        step0 = priors_dict[name][0]
+        step_prior = BoxUniform(
+            low= torch.tensor([step0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([step0[1]], dtype=torch.float32, device=device)
+            )
+        return step_prior
+
+    elif "sigint" in name:
+        scatter0 = priors_dict[name][0]
+        scatter_prior = BoxUniform(
+            low= torch.tensor([scatter0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([scatter0[1]], dtype=torch.float32, device=device)
+            )
+        return scatter_prior
+
+    elif "SELECTION" in name:
+        list_o_priors = []
+        for s in selection_parameters:
+            for _ in range(len(knot_list[s])):
+                selection_prior = BoxUniform(
+                    low=torch.tensor([0], dtype=torch.float32, device=device),
+                    high=torch.tensor([5], dtype=torch.float32, device=device)
+                )
+                list_o_priors.append(selection_prior)
+        return MultipleIndependent(list_o_priors)
+
+    elif "2POPS" in name:
+        a_prior = BoxUniform(
+            low= torch.tensor([0], dtype=torch.float32, device=device),
+            high=torch.tensor([1], dtype=torch.float32, device=device)
+            )
+        return a_prior
+
+def TwoDBoxPrior(param_1, param_2, device="cpu"):
+    """
+    General wrapper for any distribution with two parameters.
+    """
+
+    p1_prior = BoxUniform(
+        low= torch.tensor([param_1[0]], dtype=torch.float32, device=device),
+        high=torch.tensor([param_1[1]], dtype=torch.float32, device=device)
+        )
+
+    p2_prior = BoxUniform(
+        low= torch.tensor([param_2[0]], dtype=torch.float32, device=device),
+        high=torch.tensor([param_2[1]], dtype=torch.float32, device=device)
+        )
+
+    return p1_prior, p2_prior
+
+
+##################
+## Knots creation
+##################
 
 def create_knots(infos):
     import pandas as pd
@@ -970,497 +448,3 @@ def create_knots(infos):
         selection_parameters = None
 
     return knot_lists, parameters_to_condition_on, infos, selection_parameters
-
-def add_distance(df_tensor):
-    
-    x1_obs = df_tensor['x1'] ; c_obs = df_tensor['c'] ; mB_obs = df_tensor['mB']
-    
-    beta = 3.1 ; alpha = 0.16 ; M0 = -19.3
-    
-    correction = alpha * x1_obs - beta * c_obs + M0 + mB_obs
-
-    #print("Setting the mean MURES values to around 0.")
-    MURES =  correction - df_tensor['MU'] #- torch.mean(correction) + torch.mean(df_tensor['MU'])
-    
-    return  MURES
-
-
-def load_data(simfilename, datfilename):
-
-    from astropy.cosmology import Planck18
-    import numpy as np
-    import pandas as pd
-    df = pd.read_csv(simfilename, comment="#", sep='\s+')
-
-    df['SIM_EBV'] = df.SIM_AV/df.SIM_RV
-    df['MU'] = Planck18.distmod(df.zHD.values).value
-
-
-    
-    dfdata = pd.read_csv(datfilename, 
-                             comment="#", sep=r'\s+')
-    dfdata['MU'] = Planck18.distmod(dfdata.zHD.values).value
-
-    print("Only loading DES Data")
-    #dfdata = dfdata.loc[dfdata.IDSURVEY == 10]
-    #dfdata.loc[dfdata.PROB_SNNV19 < -1., "PROB_SNNV19"] = 1
-    try:
-        dfdata = dfdata.loc[dfdata.PROB_SNNV19 >= 0.5]
-    except AttributeError:
-        print("This file doesn't have 'PROB_SNNV19' as a valid key.")
-
-    print("Ensuring only valid log masses.")
-    dfdata = dfdata.loc[dfdata.HOST_LOGMASS > 0]
-    df = df.loc[df.HOST_LOGMASS > 0 ]
-
-    return df, dfdata
-
-def standardise_data(dft, dfdata, parameters_to_condition_on, param_names):
-
-    return_dict = {}
-    
-    import numpy as np
-
-    for param in parameters_to_condition_on:
-        if "ERR" in param:
-            dfdata[param] = np.log(dfdata[param].values)
-            meanval = np.mean(dfdata[param].values)
-            stdval  = np.std(dfdata[param].values)
-            dfdata[param] = (dfdata[param] - meanval)/stdval
-
-            return_dict[param+"_data"] = [meanval, stdval]
-            
-            dft[param] = np.log(dft[param].values)
-            meanval = np.mean(dft[param].values)
-            stdval  = np.std(dft[param].values)
-            dft[param] = (dft[param] - meanval)/stdval
-
-            return_dict[param+"_sim"] = [meanval, stdval]
-        else:
-            #Data
-            meanval = np.mean(dfdata[param].values)
-            stdval  = np.std(dfdata[param].values)
-            dfdata[param] = (dfdata[param] - meanval)/stdval
-
-            return_dict[param+"_data"] = [meanval, stdval]
-
-            #sim
-            meanval = np.mean(dft[param].values)
-            stdval  = np.std(dft[param].values)
-            dft[param] = (dft[param] - meanval)/stdval
-
-            return_dict[param+"_sim"] = [meanval, stdval]
-
-        #Repeat once to standardise input parameters; only applies to the sims
-        for param in param_names:
-            meanval = np.mean(dft[param].values)
-            stdval  = np.std(dft[param].values)
-            dft[param] = (dft[param] - meanval)/stdval
-
-            return_dict[param+"_sim"] = [meanval, stdval]
-
-    return dft, dfdata, return_dict
-
-
-
-def simulate_model(n_sim, n_batch, sims_savename, priors, simulator, inference, device="cpu", batched=True):
-    theta_tot = []
-    mask_tot = []
-    
-    import h5py
-    from tqdm import tqdm
-
-    with h5py.File(sims_savename, "w") as f:
-        
-        theta_dim = priors.sample((1,)).shape[-1]
-        x_example = simulator(priors.sample((1,)).to(device))
-        x_shape = x_example.shape[1:] if x_example.ndim > 1 else (x_example.shape[-1],)
-
-        theta_ds = f.create_dataset(
-            "theta",
-            shape=(0, theta_dim),
-            maxshape=(None, theta_dim),
-            dtype="float32",
-            chunks=True,
-        )
-
-        x_ds = f.create_dataset(
-            "x",
-            shape=(0, *x_shape),
-            maxshape=(None, *x_shape),
-            dtype="float32",
-            chunks=True,
-        )
-
-        cursor = 0
-
-        with tqdm(total=n_sim, desc="Running simulations", unit="sim") as pbar:
-            for start in range(0, n_sim, n_batch):
-
-                current_bs = min(n_batch, n_sim - start)
-
-                theta_batch = priors.sample((current_bs,)).to(device)
-
-                if batched:
-                    x_batch = simulator(theta_batch)
-                else:
-                    x_batch = torch.stack([simulator(t) for t in theta_batch])
-
-                theta_np = theta_batch.cpu().numpy()
-                x_np = x_batch.cpu().numpy()
-
-                mask = ~torch.isnan(x_batch).any(dim=tuple(range(1, x_batch.ndim)))
-                theta_tot.append(theta_batch)
-                mask_tot.append(mask)
-
-                # resize datasets
-                theta_ds.resize(cursor + current_bs, axis=0)
-                x_ds.resize(cursor + current_bs, axis=0)
-
-                # write batch
-                theta_ds[cursor:cursor + current_bs] = theta_np
-                x_ds[cursor:cursor + current_bs] = x_np
-
-                cursor += current_bs
-                pbar.update(current_bs)
-    
-    theta_tot = torch.cat(theta_tot, dim=0)
-    mask_tot = torch.cat(mask_tot, dim=0)
-
-    theta_valid = theta_tot[mask_tot]
-
-    p_vals = priors.sample((n_sim,))
-
-
-    return theta_valid, p_vals
-
-def save_output(labels, theta_hat, filename):
-    with open(filename, "w") as f:
-        for i in range(len(labels)):
-            string = f"{labels[i]},{theta_hat[i]:.4f}"
-            string = string+"\n"
-            f.write(string)
-
-
-
-##########################
-# MURES Calculation code
-# (Currently unused)
-##########################
-
-def add_beta_distance(df_tensor, SN_beta, SN_alpha=0.15):
-    """
-    df_tensor: dict of tensors, each (N,)
-    SN_beta:   (B, 1) or (B,)
-    SN_alpha:  scalar
-    """
-
-    x1 = df_tensor['SIM_x1']  # (N,)
-    c  = df_tensor['SIM_c']   # (N,)
-    mB = df_tensor['SIM_mB']  # (N,)
-
-    # Ensure shapes are broadcastable
-    if SN_beta.ndim == 1:
-        SN_beta = SN_beta.unsqueeze(1)  # (B, 1)
-
-    x1 = x1.unsqueeze(0)  # (1, N)
-    c  = c.unsqueeze(0)
-    mB = mB.unsqueeze(0)
-
-    alpha = SN_alpha
-    beta  = SN_beta
-    M0    = 19.3643
-
-    MU = alpha * x1 - beta * c + M0 + mB  # (B, N)
-
-    return MU
-
-def add_mcmc_distance(mcmc, df_tensor):
-    
-    x1_obs = df_tensor['x1'] ; c_obs = df_tensor['c'] ; mB_obs = df_tensor['mB']
-    
-    nuisance = mcmc.get_samples()
-    beta = nuisance['beta'].mean() ; alpha = nuisance['alpha'].mean() ; M0 = nuisance['M'].mean()
-    
-    correction = alpha * x1_obs - beta * c_obs + M0 + mB_obs
-        
-    MURES = df_tensor['MU'] - correction
-    
-    return  MURES
-    
-def start_distance(NUM_WARMUP = 50, NUM_SAMPLES = 150, NUM_CHAINS = 1):
-
-    nuts_kernel = NUTS(
-        distancinator,
-        init_strategy=init_to_median(),
-        max_tree_depth=10
-        )
-    
-    salt_mcmc = MCMC(
-        nuts_kernel,
-        warmup_steps=NUM_WARMUP,
-        num_samples=NUM_SAMPLES,
-        num_chains=NUM_CHAINS,
-        disable_progbar=True,
-    )
-    
-    return salt_mcmc
-
-def distancinator(x0_obs, x0_err, x1_obs, x1_err, c_obs, c_err, dist_mod):
-
-    n = dist_mod.shape[0]
-
-    alpha = pyro.sample("alpha", dist.Normal(0.1, 1.0))
-    beta = pyro.sample("beta", dist.Normal(2.0, 3.0))
-    M = pyro.sample("M", dist.Uniform(-21.5, -17.0))
-    sigma_int = pyro.sample("sigma_int", dist.HalfNormal(0.3))
-
-    with pyro.plate("sne", n):
-        log10_x0 = pyro.sample("log10_x0", dist.Normal(-3.0, 2.0))
-        x0_true = torch.pow(10.0, log10_x0)
-
-        pyro.sample("x0_obs",
-                    dist.Normal(x0_true, x0_err),
-                    obs=x0_obs)
-
-        correction = alpha * x1_obs - beta * c_obs - M
-
-        mag_err = (2.5 / torch.log(torch.tensor(10.0))) * (x0_err / x0_true)
-        total_err = torch.sqrt(mag_err**2 + sigma_int**2 + x1_err**2 + c_err**2)
-
-        mean_mag = -2.5 * torch.log10(x0_true) + 10.635 + correction
-        
-        pyro.sample("cosmo",
-                    dist.Normal(mean_mag, total_err),
-                    obs=dist_mod)
-
-####################
-## BEGIN PRIORS
-######################
-
-def build_distribution_priors(param_names, dicts, device='cpu'):
-    """Build the list of BoxUniform priors for distribution parameters only (no STEP/SCATTER)."""
-    function_dict, split_dict, priors_dict, corr_dict, selection_dict = dicts
-    list_o_priors = []
-
-    params_to_avoid = ['EVOL', 'STEP', 'SCATTER', 'SELECTION']
-
-    for name in param_names:
-        if name in params_to_avoid:
-            continue
-
-        if "_HIGH_" in name:
-            name = name.split("_HIGH_")[0]
-
-        func_name = function_dict[name].__name__
-
-        if ("Gaussian" in func_name) and  (func_name != "DistDoubleGaussian"):
-            mu0, sigma0 = priors_dict[name]
-            mu_prior, sigma_prior = TwoDBoxPrior(mu0, sigma0, device=device)
-            list_o_priors.extend([mu_prior, sigma_prior])
-            if name in split_dict:
-                evol_type = (split_dict[name][0])
-                if evol_type == "Stepwise":
-                    list_o_priors.extend([mu_prior, sigma_prior])
-                elif evol_type == "Linear":
-                    slope0 = priors_dict[name+"_EVOL"][0]
-                    slope_prior = BoxUniform(
-                        low= torch.tensor([slope0[0]], dtype=torch.float32, device=device),
-                        high=torch.tensor([slope0[1]], dtype=torch.float32, device=device)
-                            )
-                    list_o_priors.extend([slope_prior])
-
-        elif "DistDelta" in func_name:
-            prior0 = priors_dict[name][0]
-
-            delta_prior = BoxUniform(
-                low= torch.tensor([prior0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([prior0[1]], dtype=torch.float32, device=device)
-                    )
-
-            list_o_priors.append(delta_prior)
-
-        elif "DistExponential" in func_name:
-            tau0 = priors_dict[name][0]
-
-            tau_prior = BoxUniform(
-                low= torch.tensor([tau0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([tau0[1]], dtype=torch.float32, device=device)
-                    )
-
-            list_o_priors.append(tau_prior)
-
-            if name in split_dict:
-                evol_type = (split_dict[name][0])
-                if evol_type == "Stepwise":
-                    try:
-                        tau0 = priors_dict[name][1]
-                        print("Checking for more prior ranges for tau...")
-                        tau_prior = BoxUniform(
-                low= torch.tensor([tau0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([tau0[1]], dtype=torch.float32, device=device)
-                    )
-                        list_o_priors.extend([tau_prior])
-                    except IndexError:
-                        list_o_priors.extend([tau_prior])
-                elif evol_type == "Linear":
-                    slope0 = priors_dict[name+"_EVOL"]
-                    slope0 = BoxUniform(
-                        low= torch.tensor([slope0[0]], dtype=torch.float32, device=device),
-                        high=torch.tensor([slope0[1]], dtype=torch.float32, device=device)
-                            )
-                    list_o_priors.extend([slope_prior])
-
-
-        if func_name == "DistDoubleGaussian":
-            print("Detected a Double Gaussian.")
-            mu1, sigma1, mu2, sigma2, a = priors_dict[name]
-
-            mu1_prior = BoxUniform(
-                low= torch.tensor([mu1[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([mu1[1]], dtype=torch.float32, device=device)
-                )
-
-            sigma1_prior = BoxUniform(
-                low= torch.tensor([sigma1[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([sigma1[1]], dtype=torch.float32, device=device)
-                )
-
-            mu2_prior = BoxUniform(
-                low= torch.tensor([mu2[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([mu2[1]], dtype=torch.float32, device=device)
-                )
-
-            sigma2_prior = BoxUniform(
-                low= torch.tensor([sigma2[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([sigma2[1]], dtype=torch.float32, device=device)
-                )
-
-            a_prior = BoxUniform(
-                low= torch.tensor([a[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([a[1]], dtype=torch.float32, device=device)
-                )
-
-
-            list_o_priors.extend([mu1_prior, sigma1_prior, mu2_prior, sigma2_prior, a_prior])
-
-            if name in split_dict:
-                evol_type = (split_dict[name][0])
-                if evol_type == "Stepwise":
-                    list_o_priors.extend([mu1_prior, sigma1_prior, mu2_prior, sigma2_prior, a_prior])
-                elif evol_type == "Linear":
-                    slope0 = priors_dict[name+"_EVOL"]
-                    slope0 = BoxUniform(
-                        low= torch.tensor([slope0[0]], dtype=torch.float32, device=device),
-                        high=torch.tensor([slope0[1]], dtype=torch.float32, device=device)
-                            )
-                    list_o_priors.extend([slope_prior])
-
-        if func_name == "DistLogistic":
-            L0, k0, sigma0 = priors_dict[name]
-            L_prior = BoxUniform(
-                low= torch.tensor([L0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([L0[1]], dtype=torch.float32, device=device)
-                )
-            k_prior = BoxUniform(
-                low= torch.tensor([k0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([k0[1]], dtype=torch.float32, device=device)
-                )
-            sigma_prior = BoxUniform(
-                low= torch.tensor([sigma0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([sigma0[1]], dtype=torch.float32, device=device)
-                )
-            list_o_priors.extend([L_prior, k_prior, sigma_prior])
-
-        if func_name == "DistGamma":
-            tau0, gamma0 = priors_dict[name]
-            tau_prior = BoxUniform(
-                low= torch.tensor([tau0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([tau0[1]], dtype=torch.float32, device=device)
-                )
-            gamma_prior = BoxUniform(
-                low= torch.tensor([gamma0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([gamma0[1]], dtype=torch.float32, device=device)
-                )
-            list_o_priors.extend([tau_prior, gamma_prior])
-
-
-        else:
-            AssertionError(f"You passed me {func_name}; I do not recognise this.")
-
-    return list_o_priors
-
-
-def build_special_priors(param_names, dicts, knot_list=None, selection_parameters=None, device='cpu'):
-    """Build the list of priors for STEP and SCATTER (appended last in theta)."""
-    _, _, priors_dict, _, selection_dict = dicts
-    list_o_priors = []
-
-    if "STEP" in param_names:
-        step0 = priors_dict["STEP"][0]
-        step_prior = BoxUniform(
-            low= torch.tensor([step0[0]], dtype=torch.float32, device=device),
-            high=torch.tensor([step0[1]], dtype=torch.float32, device=device)
-            )
-        list_o_priors.extend([step_prior])
-
-    if "SCATTER" in param_names:
-        scatter0 = priors_dict["SCATTER"][0]
-        scatter_prior = BoxUniform(
-            low= torch.tensor([scatter0[0]], dtype=torch.float32, device=device),
-            high=torch.tensor([scatter0[1]], dtype=torch.float32, device=device)
-            )
-        list_o_priors.extend([scatter_prior])
-
-    if "SELECTION" in param_names:
-        for s in selection_parameters:
-            for _ in range(len(knot_list[s])):
-                selection_prior = BoxUniform(
-                    low=torch.tensor([0], dtype=torch.float32, device=device),
-                    high=torch.tensor([5], dtype=torch.float32, device=device)
-                )
-                list_o_priors.append(selection_prior)
-
-    return list_o_priors
-
-
-def prior_generator(param_names, dicts, knot_list=None, selection_parameters=None, device='cpu'):
-    all_priors = build_distribution_priors(param_names, dicts, device=device) + \
-                 build_special_priors(param_names, dicts, knot_list, selection_parameters, device=device)
-    print(f"Added {len(all_priors)} priors")
-    return MultipleIndependent(all_priors, device=device)
-
-def TwoDBoxPrior(param_1, param_2, device="cpu"):
-    """
-    General wrapper for any distribution with two parameters.
-    """
-
-    p1_prior = BoxUniform(
-        low= torch.tensor([param_1[0]], dtype=torch.float32, device=device),
-        high=torch.tensor([param_1[1]], dtype=torch.float32, device=device)
-        )
-
-    p2_prior = BoxUniform(
-        low= torch.tensor([param_2[0]], dtype=torch.float32, device=device),
-        high=torch.tensor([param_2[1]], dtype=torch.float32, device=device)
-        )
-
-    return p1_prior, p2_prior
-
-
-def TwoDGaussianPrior(param_1, param_2, device="cpu"):
-    """
-    theta[0] ~ mean value, error on mean value
-    theta[1] ~ standard deviation of the Gaussian
-    """
-
-    p1_prior = Normal(
-        loc=torch.tensor(param_1[0], dtype=torch.float32, device=device),
-        scale=torch.tensor(param_1[1], dtype=torch.float32, device=device),
-    )
-
-    p2_prior = HalfNormal(
-        scale=torch.tensor(param_2[0], dtype=torch.float32, device=device),
-    )
-
-    return p1_prior, p2_prior

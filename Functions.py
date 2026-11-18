@@ -1,350 +1,292 @@
-import torch
-import math
-import numpy as np
+import jax
+import jax.numpy as jnp
+import jax.scipy as jsp
 
 ##############
-# torch-compatible functions live in this code block; must start with "Dist"
+# jax-compatible functions live in this code block; must start with "Dist"
 ##############
 
-def DistGaussian(x, theta, correlation):
+def DistGaussian(key, theta, correlation):
     """
-    Gaussian likelihood for batched θ.
+    Generate Gaussian samples using inverse transform sampling.
 
-    x:     Tensor of shape (N,) or (batch_size, N)
-    theta: Tensor of shape (batch_size, 2) -> [mu, sigma] for each θ
+    key:         JAX PRNG key
+    theta:       Array of shape (batch_size, 2) -> [mu, sigma]
+    correlation: Unused for now
 
     Returns:
-        Tensor of shape (batch_size, N) -> likelihood of each x for each θ
+        Gaussian samples of shape (batch_size, N)
     """
-    x = torch.as_tensor(x, dtype=torch.float32)
-    theta = torch.as_tensor(theta, dtype=torch.float32)
 
-    # Ensure theta has batch dimension
+    theta = jnp.asarray(theta, dtype=jnp.float32)
+
     if theta.ndim == 1:
-        theta = theta.unsqueeze(0)  # (1,2)
-    batch_size = theta.shape[0]
-
-    # Ensure x has shape (batch_size, N)
-    if x.ndim == 1:
-        x = x.unsqueeze(0)  # (1, N)
-    if x.shape[0] == 1 and batch_size > 1:
-        x = x.expand(batch_size, -1)
-
-    mu = theta[:, 0].unsqueeze(1)      # (batch_size, 1)
-    sigma = theta[:, 1].unsqueeze(1)   # (batch_size, 1)
-
-    return torch.exp(-0.5 * ((x - mu)/sigma)**2) / (sigma * math.sqrt(2.0 * math.pi))
+        theta = theta[None, :]
 
 
-def DistGaussian_EVOL(x, theta, correlation):
+    # Generate uniform random variables
+    u = jax.random.uniform(
+        key,
+        minval=1e-7,
+        maxval=1.0 - 1e-7
+    )
+
+    # Extract Gaussian parameters
+    mu = theta[:, 0:1]
+    sigma = theta[:, 1:2]
+
+    # Inverse transform sampling (probit)
+    z = jsp.special.ndtri(u)
+
+    # Transform into Gaussian samples
+    x = mu + sigma * z
+
+    return x.squeeze()
+
+def DistGaussian_EVOL(key, theta, correlation):
     """
-    Gaussian likelihood with μ evolving via m * correlation.
+    Generate a single Gaussian random value with evolving mean.
 
-    x:           Tensor of shape (N,) or (batch_size, N)
-    theta:       Tensor of shape (batch_size, 3) -> [mu0, sigma, m]
-    correlation: Same shape as x
+    theta:       [mu0, sigma, m]
+    correlation: Scalar correlation value
 
     Returns:
-        Tensor of shape (batch_size, N)
+        Scalar JAX array
     """
-    x = torch.as_tensor(x, dtype=torch.float32)
-    theta = torch.as_tensor(theta, dtype=torch.float32)
-    correlation = torch.as_tensor(correlation, dtype=torch.float32)
 
-    # Ensure theta has batch dimension
-    if theta.ndim == 1:
-        theta = theta.unsqueeze(0)  # (1,3)
-    batch_size = theta.shape[0]
+    theta = jnp.asarray(theta, dtype=jnp.float32)
+    correlation = jnp.asarray(correlation, dtype=jnp.float32)
 
-    # Ensure x has shape (batch_size, N)
-    if x.ndim == 1:
-        x = x.unsqueeze(0)
-    if x.shape[0] == 1 and batch_size > 1:
-        x = x.expand(batch_size, -1)
+    u = jax.random.uniform(
+        key,
+        shape=(),
+        minval=1e-7,
+        maxval=1.0 - 1e-7
+    )
 
-    # Ensure correlation matches x
-    if correlation.ndim == 1:
-        correlation = correlation.unsqueeze(0)
-    if correlation.shape[0] == 1 and batch_size > 1:
-        correlation = correlation.expand(batch_size, -1)
+    z = jsp.special.ndtri(u)
 
-    mu0 = theta[:, 0].unsqueeze(1)   # (batch_size, 1)
-    sigma = theta[:, 1].unsqueeze(1)
-    m = theta[:, 2].unsqueeze(1)
+    mu0, sigma, m = theta.reshape(-1)[0], theta.reshape(-1)[1], theta.reshape(-1)[2]
 
-    # μ varies per data point
-    mu = mu0 + m * correlation       # (batch_size, N)
+    mu = mu0 + m * correlation
 
-    return torch.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
+    return (mu + sigma * z).squeeze()
 
-def DistExponential(x, theta, correlation):
+def DistExponential(key, theta, correlation):
     """
-    Exponential likelihood for batched θ.
+    Generate a single exponential random value using inverse transform sampling.
 
-    x:     Tensor of shape (N,) or (batch_size, N)
-    theta: 
+    theta:       [tau]
+    correlation: Unused
 
     Returns:
-        Tensor of shape (batch_size, N) -> likelihood of each x for each θ
+        Scalar JAX array
     """
-    x = torch.as_tensor(x, dtype=torch.float32)
-    theta = torch.as_tensor(theta, dtype=torch.float32)
 
-    # Ensure theta has batch dimension
-    if theta.ndim == 1:
-        theta = theta.unsqueeze(0)  # (1,2)
-    batch_size = theta.shape[0]
+    theta = jnp.asarray(theta, dtype=jnp.float32)
 
-    # Ensure x has shape (batch_size, N)
-    if x.ndim == 1:
-        x = x.unsqueeze(0)  # (1, N)
-    if x.shape[0] == 1 and batch_size > 1:
-        x = x.expand(batch_size, -1)
+    u = jax.random.uniform(
+        key,
+        shape=(),
+        minval=1e-7,
+        maxval=1.0 - 1e-7
+    )
 
-    tau = theta[:, 0].unsqueeze(1)      # (batch_size, 1)\
-    
-    #tau_proposal = x.mean(dim=1, keepdim=True)
-    tau_proposal = 0.5 #Hard coded to 0.5 right now on account of selection effects.
-    
-    # Convert tau to lambda
-    lambda_target = 1.0 / tau
-    lambda_proposal = 1.0 / tau_proposal
+    tau = theta.reshape(-1)[0]
 
-    # Compute importance weights
-    weights = (lambda_target / lambda_proposal) * torch.exp(-(lambda_target - lambda_proposal) * x)
+    x = -tau * jnp.log(1.0 - u)
 
-    return weights
+    return x.squeeze()
 
-def DistExponential_EVOL(x, theta, correlation):
-
-    return
+def DistExponential_EVOL(key, theta, correlation):
     """
-    Exponential likelihood for batched θ.
+    Generate a single exponential random value with evolving scale.
 
-    x:     Tensor of shape (N,) or (batch_size, N)
-    theta: 
+    theta:       [tau0, m]
+    correlation: Scalar correlation value
 
     Returns:
-        Tensor of shape (batch_size, N) -> likelihood of each x for each θ
+        Scalar JAX array
     """
-    x = torch.as_tensor(x, dtype=torch.float32)
-    theta = torch.as_tensor(theta, dtype=torch.float32)
 
-    # Ensure theta has batch dimension
-    if theta.ndim == 1:
-        theta = theta.unsqueeze(0)  # (1,2)
-    batch_size = theta.shape[0]
+    theta = jnp.asarray(theta, dtype=jnp.float32)
+    correlation = jnp.asarray(correlation, dtype=jnp.float32)
 
-    # Ensure x has shape (batch_size, N)
-    if x.ndim == 1:
-        x = x.unsqueeze(0)  # (1, N)
-    if x.shape[0] == 1 and batch_size > 1:
-        x = x.expand(batch_size, -1)
+    u = jax.random.uniform(
+        key,
+        shape=(),
+        minval=1e-7,
+        maxval=1.0 - 1e-7
+    )
 
-    tau = theta[:, 0].unsqueeze(1)      # (batch_size, 1)\
-    
-    #tau_proposal = x.mean(dim=1, keepdim=True)
-    tau_proposal = 0.5 #Hard coded to 0.5 right now on account of selection effects.
-    
-    # Convert tau to lambda
-    lambda_target = 1.0 / tau
-    lambda_proposal = 1.0 / tau_proposal
+    tau0, m = theta.reshape(-1)[0], theta.reshape(-1)[1]
 
-    # Compute importance weights
-    weights = (lambda_target / lambda_proposal) * torch.exp(-(lambda_target - lambda_proposal) * x)
+    tau = tau0 + m * correlation
 
-    return weights
+    x = -tau * jnp.log(1.0 - u)
 
+    return x.squeeze()
 
-def DistDoubleGaussian(x, theta, correlation):
+def DistDoubleGaussian(key, theta, correlation):
     """
-    Gaussian likelihood for batched θ.
+    Generate a single random value from a double Gaussian mixture.
 
-    x:     Tensor of shape (N,) or (batch_size, N)
-    theta: Tensor of shape (batch_size, 2) -> [mu1, sigma1, mu2, sigma2, a] for each θ
+    theta:       [mu1, sigma1, mu2, sigma2, a]
+    correlation: Unused
 
     Returns:
-        Tensor of shape (batch_size, N) -> likelihood of each x for each θ
+        Scalar JAX array
     """
-    x = torch.as_tensor(x, dtype=torch.float32)
-    theta = torch.as_tensor(theta, dtype=torch.float32)
 
-    # Ensure theta has batch dimension
-    if theta.ndim == 1:
-        theta = theta.unsqueeze(0)  # (1,2)
-    batch_size = theta.shape[0]
+    theta = jnp.asarray(theta, dtype=jnp.float32).reshape(-1)
 
-    # Ensure x has shape (batch_size, N)
-    if x.ndim == 1:
-        x = x.unsqueeze(0)  # (1, N)
-    if x.shape[0] == 1 and batch_size > 1:
-        x = x.expand(batch_size, -1)
+    mu1, sigma1, mu2, sigma2, a = theta
 
-    mu1 = theta[:, 0].unsqueeze(1)      # (batch_size, 1)
-    sigma1 = theta[:, 1].unsqueeze(1)   
+    # Generate uniform random variable
+    u = jax.random.uniform(
+        key,
+        shape=(),
+        minval=1e-7,
+        maxval=1.0 - 1e-7
+    )
 
-    #weight a is only applied to one Gaussian to reduce dimensionality.
-    mu2 = theta[:, 2].unsqueeze(1)      
-    sigma2 = theta[:, 3].unsqueeze(1)  
-    a = theta[:, 4].unsqueeze(1)     
+    # Mixture CDF
+    def mixture_cdf(x):
+        G1 = jsp.special.ndtr((x - mu1) / sigma1)
+        G2 = jsp.special.ndtr((x - mu2) / sigma2)
+        return (G1 + a * G2) / (1.0 + a)
 
-    
-    G1 = torch.exp(-0.5 * ((x - mu1)/sigma1)**2) / (sigma1 * math.sqrt(2.0 * math.pi))
-    G2 = a*torch.exp(-0.5 * ((x - mu2)/sigma2)**2) / (sigma2 * math.sqrt(2.0 * math.pi))
+    # Establish numerical search bounds
+    lower = jnp.minimum(mu1 - 10.0 * sigma1, mu2 - 10.0 * sigma2)
+    upper = jnp.maximum(mu1 + 10.0 * sigma1, mu2 + 10.0 * sigma2)
 
-    return G1+G2
+    # Bisection to invert mixture CDF
+    def bisect(i, bounds):
+        lo, hi = bounds
+        mid = (lo + hi) / 2.0
 
-def DistLogistic(x, theta, correlation):
+        cdf_mid = mixture_cdf(mid)
+
+        return jax.lax.cond(
+            cdf_mid < u,
+            lambda _: (mid, hi),
+            lambda _: (lo, mid),
+            operand=None
+        )
+
+    lower, upper = jax.lax.fori_loop(
+        0, 100, bisect, (lower, upper)
+    )
+
+    return ((lower + upper) / 2.0).squeeze()
+
+def DistLogistic(key, theta, correlation):
     """
-    Logistic-shaped likelihood for importance sampling.
+    Generate a single Gaussian random value with a logistic-shaped evolving mean.
 
-    x:           (N,) or (B, N)
-    theta:       (B, 3) -> [L, k, sigma]
-    correlation: (N,) or (B, N)
+    theta:       [L, k, sigma]
+    correlation: Scalar correlation value
 
     Returns:
-        (B, N) likelihood weights
+        Scalar JAX array
     """
-    x = torch.as_tensor(x, dtype=torch.float32, device=theta.device)
-    theta = torch.as_tensor(theta, dtype=torch.float32)
-    correlation = torch.as_tensor(correlation, dtype=torch.float32, device=theta.device)
 
-    # --- Ensure batch dims ---
-    if theta.ndim == 1:
-        theta = theta.unsqueeze(0)
-    B = theta.shape[0]
+    theta = jnp.asarray(theta, dtype=jnp.float32).reshape(-1)
+    correlation = jnp.asarray(correlation, dtype=jnp.float32)
 
-    if x.ndim == 1:
-        x = x.unsqueeze(0)
-    if x.shape[0] == 1 and B > 1:
-        x = x.expand(B, -1)
+    u = jax.random.uniform(
+        key,
+        shape=(),
+        minval=1e-7,
+        maxval=1.0 - 1e-7
+    )
 
-    if correlation.ndim == 1:
-        correlation = correlation.unsqueeze(0)
-    if correlation.shape[0] == 1 and B > 1:
-        correlation = correlation.expand(B, -1)
+    z = jsp.special.ndtri(u)
 
-    # --- Parameters ---
-    L     = theta[:, 0].unsqueeze(1)
-    k     = theta[:, 1].unsqueeze(1)
-    sigma = theta[:, 2].unsqueeze(1)
+    L, k, sigma = theta[0], theta[1], theta[2]
 
-    # --- Logistic mean ---
-    mean = L / (1 + torch.exp(k * correlation - 10)) + 2
+    # Logistic-shaped evolving mean
+    mean = L / (1.0 + jnp.exp(k * correlation - 10.0)) + 2.0
 
-    # --- Gaussian likelihood ---
-    z = (x - mean) / sigma
-    pdf = torch.exp(-0.5 * z**2) / (sigma * math.sqrt(2.0 * math.pi))
+    # Gaussian sample
+    x = mean + sigma * z
 
-    return pdf
+    return x.squeeze()
 
-def DistGamma(x, theta, correlation):
-
+def DistGamma(key, theta, correlation):
     """
-    Gamma likelihood for batched θ.
+    Generate a single Gamma random value using inverse transform sampling.
 
-    x:     Tensor of shape (N,) or (batch_size, N)
-    theta: 
+    theta:       [tau, gamma]
+    correlation: Unused
 
     Returns:
-        Tensor of shape (batch_size, N) -> likelihood of each x for each θ
+        Scalar JAX array
     """
-    x = torch.as_tensor(x, dtype=torch.float32)
-    theta = torch.as_tensor(theta, dtype=torch.float32)
 
-    # Ensure theta has batch dimension
-    if theta.ndim == 1:
-        theta = theta.unsqueeze(0)  # (1,2)
-    batch_size = theta.shape[0]
+    theta = jnp.asarray(theta, dtype=jnp.float32).reshape(-1)
 
-    # Ensure x has shape (batch_size, N)
-    if x.ndim == 1:
-        x = x.unsqueeze(0)  # (1, N)
-    if x.shape[0] == 1 and batch_size > 1:
-        x = x.expand(batch_size, -1)
+    tau, gamma = theta[0], theta[1]
 
-    tau = theta[:, 0].unsqueeze(1)      # (batch_size, 1)\
-    gamma = theta[:,1].unsqueeze(1)
-    
-    # Convert tau to lambda
+    # Generate uniform random variable
+    u = jax.random.uniform(
+        key,
+        shape=(),
+        minval=1e-7,
+        maxval=1.0 - 1e-7
+    )
+
+    # Convert scale to rate
     lambda_target = 1.0 / tau
 
-    # Compute importance weights
-    weights = x**(gamma - 1) * torch.exp(-(lambda_target) * x)
+    # Gamma CDF
+    def gamma_cdf(x):
+        return jsp.special.gammainc(
+            gamma,
+            x * lambda_target
+        )
 
-    return weights
+    # Establish numerical search bounds
+    lower = jnp.array(0.0, dtype=jnp.float32)
+    upper = tau * (gamma + 10.0 * jnp.sqrt(gamma) + 10.0)
+
+    # Bisection to invert Gamma CDF
+    def bisect(i, bounds):
+        lo, hi = bounds
+        mid = (lo + hi) / 2.0
+
+        cdf_mid = gamma_cdf(mid)
+
+        return jax.lax.cond(
+            cdf_mid < u,
+            lambda _: (mid, hi),
+            lambda _: (lo, mid),
+            operand=None
+        )
+
+    lower, upper = jax.lax.fori_loop(
+        0, 100, bisect, (lower, upper)
+    )
+
+    return ((lower + upper) / 2.0).squeeze()
+
+def DistIdentity(key, theta, correlation):
+
+    theta = jnp.asarray(theta, dtype=jnp.float32)
+
+    return theta.reshape(())
 
 
-def DistTruncatedGaussian(x, theta, correlation=None, low=1.2, high=float("inf")):
-    """
-    Truncated Gaussian likelihood for batched θ.
+def host_step(key, theta, correlation):
+    correlated_value = correlation[0]
+    threshold = correlation[1]
 
-    x:     Tensor (N,) or (batch_size, N)
-    theta: Tensor (batch_size, 2) -> [mu, sigma]
+    return jnp.where(
+        correlated_value > threshold,
+        -theta / 2,
+        theta / 2
+    )
 
-    low, high: truncation bounds (can be scalars or tensors)
-
-    Returns:
-        Tensor (batch_size, N)
-    """
-    x = torch.as_tensor(x, dtype=torch.float32)
-    theta = torch.as_tensor(theta, dtype=torch.float32)
-
-    # Ensure theta has batch dimension
-    if theta.ndim == 1:
-        theta = theta.unsqueeze(0)
-    batch_size = theta.shape[0]
-
-    # Ensure x has shape (batch_size, N)
-    if x.ndim == 1:
-        x = x.unsqueeze(0)
-    if x.shape[0] == 1 and batch_size > 1:
-        x = x.expand(batch_size, -1)
-
-    mu = theta[:, 0].unsqueeze(1)      # (B,1)
-    sigma = theta[:, 1].unsqueeze(1)   # (B,1)
-
-    # --- Gaussian PDF ---
-    pdf = torch.exp(-0.5 * ((x - mu)/sigma)**2) / (sigma * math.sqrt(2.0 * math.pi))
-
-    # --- CDF using erf ---
-    def normal_cdf(z):
-        return 0.5 * (1 + torch.erf(z / math.sqrt(2)))
-
-    a = (low - mu) / sigma
-    b = (high - mu) / sigma
-
-    Z = normal_cdf(b) - normal_cdf(a)  # normalization
-
-    # Avoid division by zero
-    Z = torch.clamp(Z, min=1e-12)
-
-    # --- Apply truncation ---
-    mask = (x >= low) & (x <= high)
-
-    truncated_pdf = torch.zeros_like(pdf)
-    truncated_pdf[mask] = pdf[mask] / Z.expand_as(pdf)[mask]
-
-    return truncated_pdf
-
-def DistDelta(theta):
-    """
-    Gaussian likelihood for batched θ.
-
-    x:     Tensor of shape (N,) or (batch_size, N)
-    theta: Tensor of shape (batch_size, 2) -> [mu, sigma] for each θ
-
-    Returns:
-        Tensor of shape (batch_size, N) -> likelihood of each x for each θ
-    """
-    theta = torch.as_tensor(theta, dtype=torch.float32)
-    
-    # Ensure theta has batch dimension
-    if theta.ndim == 1:
-        theta = theta.unsqueeze(0)  # (1,2)
-    batch_size = theta.shape[0]
-
-    return 
 def Selection_Spline(x,theta, basis):
     import torch
     """
@@ -361,46 +303,3 @@ def Selection_Spline(x,theta, basis):
     # Turn into probabilities
     return torch.sigmoid(weights)
 
-
-#########################
-# Skysurvey related functions live here, denoted with "SKY" preceding the model .
-########################
-
-def SKYexponential(xx, tau):
-    if type(xx) is str: # assumed r_ input
-            xx = eval(f"np.r_[{xx}]")
-    return xx, np.heaviside(xx, 0)*np.exp(-xx/tau)/tau
-
-def SKYexponential_split(xx, tracer, tau_HM, tau_LM, split=10):
-    if type(xx) is str: # assumed r_ input
-            xx = eval(f"np.r_[{xx}]")
-    mask_mass = tracer < split
-    mask_mass = np.atleast_1d(mask_mass)[:,None]
-    LM_mode = np.heaviside(xx, 0)*np.exp(-xx/tau_HM)/tau_LM
-    HM_mode = np.heaviside(xx, 0)*np.exp(-xx/tau_HM)/tau_LM
-    pdf = mask_mass*LM_mode + (1-mask_mass)*HM_mode
-    return xx, pdf
-
-def SKYtruncnorm_split(xx, tracer, mu_HM, sig_HM, mu_LM, sig_LM, split=10, trunc_low=1.2):
-    import scipy.stats
-    if type(xx) is str: # assumed r_ input
-            xx = eval(f"np.r_[{xx}]")
-    mask_mass = tracer < split
-    mask_mass = np.atleast_1d(mask_mass)[:,None]
-    a_LM = (trunc_low - mu_LM) / sig_LM # truncated gaussian at 1.2
-    a_HM = (trunc_low - mu_HM) / sig_HM
-    LM_mode = scipy.stats.truncnorm.pdf(xx, a_LM, np.inf, loc=mu_LM, scale=sig_LM)
-    HM_mode = scipy.stats.truncnorm.pdf(xx, a_HM, np.inf, loc=mu_HM, scale=sig_HM)
-    pdf = mask_mass*LM_mode + (1-mask_mass)*HM_mode
-    return xx, pdf
-
-def SKYmass_to_stretch(mass, xx="-4:4:0.005", mu1=0.33, sigma1=0.64, mu2=-1.50, sigma2=0.58, a=0.45):
-    from scipy.stats import norm
-    if type(xx) is str: # assumed r_ input
-            xx = eval(f"np.r_[{xx}]")
-    mode1 = norm.pdf(xx, loc=mu1, scale=sigma1)
-    mode2 = norm.pdf(xx, loc=mu2, scale=sigma2)
-    mask_mass = mass < 10
-    mask_mass = np.atleast_1d(mask_mass)[:,None]
-    pdf = mask_mass*mode1 + (1-mask_mass)*(a*mode1 + (1-a)*mode2)
-    return xx, pdf
