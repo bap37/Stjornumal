@@ -24,16 +24,11 @@ def DistGaussian(key, theta, correlation=None):
         theta = theta[None, :]
 
     # Extract Gaussian parameters
-    if correlation is None:
+    if theta.shape[-1] == 2:
         mu = theta[:, 0:1]
         sigma = theta[:, 1:2]
 
     else:
-        correlation = jnp.asarray(correlation, dtype=jnp.float32)
-
-        if correlation.ndim == 1:
-            correlation = correlation[None, :]
-
         mu0 = theta[:, 0:1]
         sigma = theta[:, 1:2]
         m = theta[:, 2:3]
@@ -55,85 +50,37 @@ def DistGaussian(key, theta, correlation=None):
 
     return x.squeeze()
 
-def DistGaussian_EVOL(key, theta, correlation):
+def DistExponential(key, theta, correlation=None):
     """
-    Generate a single Gaussian random value with evolving mean.
+    Generate exponential samples using inverse transform sampling.
 
-    theta:       [mu0, sigma, m]
-    correlation: Scalar correlation value
+    theta:
+        Scalar or [tau]: constant exponential scale
+        [tau0, m]: correlation-dependent exponential scale
 
-    Returns:
-        Scalar JAX array
-    """
-
-    theta = jnp.asarray(theta, dtype=jnp.float32)
-    correlation = jnp.asarray(correlation, dtype=jnp.float32)
-
-    u = jax.random.uniform(
-        key,
-        shape=(),
-        minval=1e-7,
-        maxval=1.0 - 1e-7
-    )
-
-    z = jsp.special.ndtri(u)
-
-    mu0, sigma, m = theta.reshape(-1)[0], theta.reshape(-1)[1], theta.reshape(-1)[2]
-
-    mu = mu0 + m * correlation
-
-    return (mu + sigma * z).squeeze()
-
-def DistExponential(key, theta, correlation):
-    """
-    Generate a single exponential random value using inverse transform sampling.
-
-    theta:       [tau]
-    correlation: Unused
-
-    Returns:
-        Scalar JAX array
+    correlation:
+        Optional correlated parameter.
     """
 
     theta = jnp.asarray(theta, dtype=jnp.float32)
 
-    u = jax.random.uniform(
-        key,
-        shape=(),
-        minval=1e-7,
-        maxval=1.0 - 1e-7
-    )
+    if theta.ndim == 0:
+        tau = theta
 
-    tau = theta.reshape(-1)[0]
+    elif theta.size == 1:
+        tau = theta.reshape(-1)[0]
 
-    x = -tau * jnp.log(1.0 - u)
-
-    return x.squeeze()
-
-def DistExponential_EVOL(key, theta, correlation):
-    """
-    Generate a single exponential random value with evolving scale.
-
-    theta:       [tau0, m]
-    correlation: Scalar correlation value
-
-    Returns:
-        Scalar JAX array
-    """
-
-    theta = jnp.asarray(theta, dtype=jnp.float32)
-    correlation = jnp.asarray(correlation, dtype=jnp.float32)
+    else:
+        tau0 = theta[..., 0:1]
+        m = theta[..., 1:2]
+        tau = tau0 + m * correlation
 
     u = jax.random.uniform(
         key,
-        shape=(),
+        shape=jnp.shape(tau),
         minval=1e-7,
         maxval=1.0 - 1e-7
     )
-
-    tau0, m = theta.reshape(-1)[0], theta.reshape(-1)[1]
-
-    tau = tau0 + m * correlation
 
     x = -tau * jnp.log(1.0 - u)
 
