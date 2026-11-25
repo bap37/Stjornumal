@@ -118,8 +118,6 @@ def load_kestrel(filename):
         "DistExponential": DistExponential,
         "DistLogistic": DistLogistic,
         "DistDoubleGaussian": DistDoubleGaussian,
-        "DistGaussian_EVOL": DistGaussian_EVOL,
-        "DistExponential_EVOL": DistExponential_EVOL,
         "DistGamma": DistGamma,
         "DistIdentity": DistIdentity,
         "host_step":host_step,

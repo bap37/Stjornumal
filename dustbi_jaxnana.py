@@ -36,15 +36,15 @@ def JAX_Simulate(key, param, simulate):
 ## For Multiple Populations 
 ##########################
 
-def generate_two_pops(simulator, priors, shared_params, NSNe, ):
+def generate_two_pops(simulator, priors, shared_params, NSNe, infos):
 
     """
     Creates a simulation with a mixture model. Right now you cannot deliberately specify the priors or mixing fraction.
     This is currently handled inside the function automatically, but it is returned as a byproduct of the function. 
     """
     
-    priors1 = JAX_Params(priors, samplers)
-    priors2 = JAX_Params(priors, samplers)
+    priors1 = JAX_Params(priors, samplers, infos)
+    priors2 = JAX_Params(priors, samplers, infos)
  
     shared_params.append('a')
 

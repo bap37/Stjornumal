@@ -1,12 +1,16 @@
 param_names:
-    SIM_c
-    SIM_beta
-    SIM_RV
-    SIM_x1
-    SIM_EBV
-    STEP
-    SCATTER
+    c
+    SALT2beta
+    RV
+    x1
+    EBV
 
+nuisance_parameters:
+    gammaDM
+    sigint
+    2POPS
+
+#Need to make it clear the list of available keys
 
 parameters_to_condition_on:
     ['c', 'mB', 'x1', 'zHD', 'cERR', 'mBERR', 'x1ERR', 'MU', 'HOST_LOGMASS', 'MURES']
@@ -43,42 +47,41 @@ Simbank_File:
 #########################
 
 Functions:
-    SIM_c:    DistGaussian  #The shape of this parameter.
-    SIM_RV:   DistGaussian
-    SIM_EBV:  DistExponential
-    SIM_beta: DistGaussian
-    SIM_x1:   DistGaussian
+    c:    DistGaussian  #The shape of this parameter.
+    RV:   DistLogistic
+    EBV:  DistExponential
+    SALT2beta: DistIdentity
+    x1:   DistGaussian
+    gammaDM: host_step
+    sigint: DistIdentity
+
+#need to clarify list of available Functions
 
 Splits:
-    SIM_RV:  ["Stepwise","HOST_LOGMASS", 10] #A list containing the split parameter and location
-    SIM_EBV: ["Stepwise","HOST_LOGMASS", 10]
-    STEP:    ["Stepwise", "HOST_LOGMASS", 10]
+    gammaDM:    ["Stepwise", "host_LOGMASS", 10]
+#    RV:  ["Stepwise","host_LOGMASS", 10] #A list containing the split parameter and location
+#    EBV: ["Stepwise","HOST_LOGMASS", 10]
 
-#If using higher-order functions such as DistLogistic, which require two parameters
-#this dictionary tells the correlation parameter.
-#ONLY works when/if calling 2-parameter functions. 
 Correlations:
-    SIM_c:    None
-    SIM_RV:   None
-    SIM_EBV:  None
-    SIM_beta: None
-    SIM_x1:   None 
+    RV: host_LOGMASS
+    x1: host_LOGMASS
+
+
 
 # We assume BoxUniform priors for our parameters; 
 # so each tuple needs to include the lower and upper bound you expect for that parameter. 
 # Gaussians are formatted as mu then sigma
 
 Priors:
-    SIM_c:    ['(-.1, 0)', '(0.02, 0.1)']
-    SIM_EBV:  ['(0.05, 0.5)']
-    SIM_beta: ['(1.5,3)', '(0.05, 0.3)']
-    SIM_x1:   ['(-2,2)', '(0.2, 1.5)']
-    SIM_x1_EVOL: ['(-0.2,0.2)']
-    STEP:     ['(-0.2,0.2)']
-    SCATTER:  ['(0,0.1)']
-    SIM_RV:   ['(1.5,6)', '(0.2,1.2)']
-#    SIM_RV:   ['(1,3)','(-1.5, 2.1)', '(0,.5)'] #L, k, sigma
-
+    c:    ['(-.1, 0)', '(0.02, 0.1)']
+    EBV:  ['(0.05, 0.5)']
+    SALT2beta: ['(1.5,3)', '(0.05, 0.3)']
+    x1:   ['(-2,2)', '(0.2, 1.5)']
+    x1_EVOL: ['(-0.2,0.2)']
+    gammaDM:     ['(-0.2,0.2)']
+    sigint:  ['(0,0.1)']
+    RV:   ['(1,3)','(-1.5, 2.1)', '(0,.5)'] #L, k, sigma
+    #RV:   ['(1.5,6)', '(0.2,1.2)']
 
 
 # Fancy latex labels for plotting. Add as you see fit. 
