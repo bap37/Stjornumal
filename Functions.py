@@ -6,16 +6,16 @@ import jax.scipy as jsp
 # jax-compatible functions live in this code block; must start with "Dist"
 ##############
 
-def DistGaussian(key, theta, correlation):
+def DistGaussian(key, theta, correlation=None):
     """
     Generate Gaussian samples using inverse transform sampling.
 
-    key:         JAX PRNG key
-    theta:       Array of shape (batch_size, 2) -> [mu, sigma]
-    correlation: Unused for now
+    theta:
+        correlation=None: [mu, sigma]
+        correlation given: [mu0, sigma, m]
 
-    Returns:
-        Gaussian samples of shape (batch_size, N)
+    correlation:
+        None or array of shape (batch_size, N) / (N,)
     """
 
     theta = jnp.asarray(theta, dtype=jnp.float32)
@@ -23,6 +23,22 @@ def DistGaussian(key, theta, correlation):
     if theta.ndim == 1:
         theta = theta[None, :]
 
+    # Extract Gaussian parameters
+    if correlation is None:
+        mu = theta[:, 0:1]
+        sigma = theta[:, 1:2]
+
+    else:
+        correlation = jnp.asarray(correlation, dtype=jnp.float32)
+
+        if correlation.ndim == 1:
+            correlation = correlation[None, :]
+
+        mu0 = theta[:, 0:1]
+        sigma = theta[:, 1:2]
+        m = theta[:, 2:3]
+
+        mu = mu0 + m * correlation
 
     # Generate uniform random variables
     u = jax.random.uniform(
@@ -30,10 +46,6 @@ def DistGaussian(key, theta, correlation):
         minval=1e-7,
         maxval=1.0 - 1e-7
     )
-
-    # Extract Gaussian parameters
-    mu = theta[:, 0:1]
-    sigma = theta[:, 1:2]
 
     # Inverse transform sampling (probit)
     z = jsp.special.ndtri(u)

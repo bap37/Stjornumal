@@ -214,8 +214,6 @@ def load_data(simfilename, datfilename):
 def prior_generator(infos):
 
     priors_dict = {}
-
-    params_to_avoid = ['EVOL', 'STEP', 'sigint', 'SELECTION', '2POPS']
     
     for name in infos['param_names']:
         priors_dict[name] = build_distribution_priors(name, infos, device='cpu')
@@ -231,6 +229,10 @@ def prior_generator(infos):
             print(name)
             priors_dict[name] = build_special_priors(name, infos, device='cpu')
 
+    #Then slot in any additional correlations.
+    for name in infos['Correlations'].keys():
+        priors_dict = build_correlation_priors(name, infos, priors_dict, device='cpu')
+
     return priors_dict
 
 def build_distribution_priors(name, infos , device='cpu'):
@@ -238,8 +240,6 @@ def build_distribution_priors(name, infos , device='cpu'):
     Called one at a time and typically handed to a dictionary for safe keeping. 
     
     """
-
-    print("Currently not generating anything for correlations...")
 
     priors_dict = infos["Priors"]
         
@@ -375,6 +375,23 @@ def build_special_priors(name, infos, device='cpu'):
             )
         return a_prior
 
+def build_correlation_priors(name, infos, priors, device='cpu'):
+
+    priors_dict = infos['Priors']
+    
+    for corr in infos['Correlations'].keys(): #key is param name, entry is value 
+        if corr in priors:
+            corr0 = priors_dict[name+"_EVOL"][0]
+            corr_prior = BoxUniform(
+                low= torch.tensor([corr0[0]], dtype=torch.float32, device=device),
+                high=torch.tensor([corr0[1]], dtype=torch.float32, device=device))
+            
+            
+            priors[name] = MultipleIndependent(list(priors[name].dists) + [corr_prior])
+            
+        
+    return priors
+
 def TwoDBoxPrior(param_1, param_2, device="cpu"):
     """
     General wrapper for any distribution with two parameters.
@@ -391,6 +408,7 @@ def TwoDBoxPrior(param_1, param_2, device="cpu"):
         )
 
     return p1_prior, p2_prior
+
 
 
 ##################

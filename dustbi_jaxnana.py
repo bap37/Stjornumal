@@ -20,10 +20,10 @@ def compile_simulator(sim_input, infos, n_sne):
     
     return simulate, (conditional_samplers, direct_samplers)
 
-def JAX_Params(priors, samplers,):
+def JAX_Params(priors, samplers, infos):
     """Generates parameters to pass to simulator object.
     """
-    params, prior_draw = assign_params_to_jaxnana(priors, samplers)
+    params, prior_draw = assign_params_to_jaxnana(priors, samplers,  infos)
 
     return params
 
@@ -153,6 +153,15 @@ def replace_random_sne(
 
 def assign_samplers(infos):
 
+    #A bit of a hack here; we always expect 2 theta but only ever pass one. 
+    #Make assign_params_to_jaxnana much cleaner down the line. 
+    def _extract_correlation(function, correlation_name):
+        def extract_correlation(key, event, theta, correlation=None):
+            corr = event[correlation_name]
+            return function(key, theta, corr)
+
+        return extract_correlation
+    
     conditionals = {} ; directs = {} 
 
     for parameter in infos['param_names']+infos['nuisance_parameters']:
@@ -163,6 +172,7 @@ def assign_samplers(infos):
             split_type = infos['Splits'][parameter][0]
 
             if split_type == 'Stepwise':
+                print(f"Assigning {parameter} as a split function with {infos['Splits'][parameter][1]} at {infos['Splits'][parameter][2]}")
 
                 correlated_parameter = infos['Splits'][parameter][1]
                 correlated_value = infos['Splits'][parameter][2]
@@ -170,11 +180,17 @@ def assign_samplers(infos):
                 conditionals[parameter] = jax.jit(
                     make_vulgar_split(infos['Functions'][parameter], correlated_parameter, correlated_value)
                 )
-
+            
             else:
                 raise NotImplementedError(f"Split type {split_type} not implemented")
 
+        elif parameter in infos['Correlations'].keys():
+                print(f"Assigning {parameter} to correlate with {infos['Correlations'][parameter]}")
+                conditionals[parameter] = jax.jit(_extract_correlation(infos['Functions'][parameter], infos['Correlations'][parameter]))
+        
+
         else:
+            print(f"Assigning {parameter}")
             directs[parameter] = jax.jit(infos['Functions'][parameter])
 
     return conditionals, directs
@@ -204,7 +220,8 @@ def make_vulgar_split(function, correlated_parameter, correlated_value):
 
     return vulgar_split
 
-def assign_params_to_jaxnana(priors, samplers):
+
+def assign_params_to_jaxnana(priors, samplers, infos):
     import jax.numpy as jnp
 
     conditional, direct = samplers
@@ -215,10 +232,9 @@ def assign_params_to_jaxnana(priors, samplers):
         draw = jnp.asarray(draw)
         return jnp.squeeze(draw) if draw.size == 1 else draw
 
-    # Direct parameters: one prior draw
+    # Direct parameters
     for key in direct:
         pdraw = clean_draw(priors[key].sample())
-
         prior_draw[key] = pdraw
         params[key] = {
             "theta": pdraw,
@@ -227,20 +243,20 @@ def assign_params_to_jaxnana(priors, samplers):
 
     # Conditional parameters
     for key in conditional:
+
         theta1 = clean_draw(priors[key].sample())
 
-        if key == "gammaDM":
-            # Mass-step parameter: only one prior draw
-            prior_draw[key] = theta1
-            params[key] = {
-                "theta": theta1,
-                "correlation": None
-            }
+        if key in infos['Correlations'].keys():
+            params[key] = {"theta": theta1, "correlation": None}
+            prior_draw[key] = {"theta": theta1}
 
-        else:
-            # Standard conditional parameter: two independent draws
+        elif key in ["gammaDM", ]:
+            params[key] = {"theta": theta1}
+            prior_draw[key] = {"theta": theta1}
+
+        else:        
+
             theta2 = clean_draw(priors[key].sample())
-
             prior_draw[key] = {
                 "theta1": theta1,
                 "theta2": theta2
@@ -252,3 +268,4 @@ def assign_params_to_jaxnana(priors, samplers):
             }
 
     return params, prior_draw
+
