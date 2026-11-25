@@ -216,6 +216,7 @@ def prior_generator(infos):
     priors_dict = {}
     
     for name in infos['param_names']:
+        
         priors_dict[name] = build_distribution_priors(name, infos, device='cpu')
 
     for name in infos['nuisance_parameters']:
@@ -374,21 +375,31 @@ def build_special_priors(name, infos, device='cpu'):
             high=torch.tensor([1], dtype=torch.float32, device=device)
             )
         return a_prior
-
+    
 def build_correlation_priors(name, infos, priors, device='cpu'):
+    """
+    Code to add correlation priors to functions. Explicitly excludes functions that already require a correlation;
+    e.g. ["DistLogistic", "DistGamma"] which don't work without that second dimension.
+
+    Input:  parameter name (string)
+            infos (nested dictionary)
+            priors (nested dictionary)
+    """
 
     priors_dict = infos['Priors']
+
+    if infos['Functions'][name].__name__ not in ["DistLogistic", "DistGamma"]:
+        corr0 = priors_dict[name+"_EVOL"][0]
+
+        corr_prior = BoxUniform(
+            low= torch.tensor([corr0[0]], dtype=torch.float32, device=device),
+            high=torch.tensor([corr0[1]], dtype=torch.float32, device=device))
     
-    for corr in infos['Correlations'].keys(): #key is param name, entry is value 
-        if corr in priors:
-            corr0 = priors_dict[name+"_EVOL"][0]
-            corr_prior = BoxUniform(
-                low= torch.tensor([corr0[0]], dtype=torch.float32, device=device),
-                high=torch.tensor([corr0[1]], dtype=torch.float32, device=device))
-            
-            
-            priors[name] = MultipleIndependent(list(priors[name].dists) + [corr_prior])
-            
+        priors[name] = MultipleIndependent(list(priors[name].dists) + [corr_prior])
+
+    else: #For DistLogistic and DistGamma, we do nothing; correlations are already handled.
+        pass
+    
         
     return priors
 
