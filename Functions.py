@@ -86,25 +86,48 @@ def DistExponential(key, theta, correlation=None):
 
     return x.squeeze()
 
-def DistDoubleGaussian(key, theta, correlation):
+
+def DistDoubleGaussian(key, theta, correlation=None):
     """
-    Generate a single random value from a double Gaussian mixture.
+    Generate samples from a double Gaussian mixture using
+    inverse transform sampling. Weight is a relative one.
 
-    theta:       [mu1, sigma1, mu2, sigma2, a]
-    correlation: Unused
+    theta:
+        correlation=None: [mu1, sigma1, mu2, sigma2, a]
+        correlation given: [mu1, sigma1, mu2, sigma2, a0, m]
 
-    Returns:
-        Scalar JAX array
+    correlation:
+        None or array of shape (batch_size, N) / (N,)
+
+    Mixture:
+        p(x) = (G1(x) + a * G2(x)) / (1 + a)
+        a = a0 + m * correlation
     """
 
-    theta = jnp.asarray(theta, dtype=jnp.float32).reshape(-1)
+    theta = jnp.asarray(theta, dtype=jnp.float32)
 
-    mu1, sigma1, mu2, sigma2, a = theta
+    if theta.ndim == 1:
+        theta = theta[None, :]
 
-    # Generate uniform random variable
+    mu1 = theta[:, 0:1]
+    sigma1 = theta[:, 1:2]
+    mu2 = theta[:, 2:3]
+    sigma2 = theta[:, 3:4]
+
+    if theta.shape[-1] == 5:
+        a = theta[:, 4:5]
+    else:
+        a0 = theta[:, 4:5]
+        m = theta[:, 5:6]
+        a = a0 + m * (correlation-10)
+
+    # Ensure a is positive, as required for a valid mixture
+    a = jnp.maximum(a, 1e-7)
+
+    # Generate uniform random variables
     u = jax.random.uniform(
         key,
-        shape=(),
+        shape=jnp.broadcast_shapes(mu1.shape, jnp.shape(a)),
         minval=1e-7,
         maxval=1.0 - 1e-7
     )
@@ -116,8 +139,14 @@ def DistDoubleGaussian(key, theta, correlation):
         return (G1 + a * G2) / (1.0 + a)
 
     # Establish numerical search bounds
-    lower = jnp.minimum(mu1 - 10.0 * sigma1, mu2 - 10.0 * sigma2)
-    upper = jnp.maximum(mu1 + 10.0 * sigma1, mu2 + 10.0 * sigma2)
+    lower = jnp.minimum(
+        mu1 - 10.0 * sigma1,
+        mu2 - 10.0 * sigma2
+    )
+    upper = jnp.maximum(
+        mu1 + 10.0 * sigma1,
+        mu2 + 10.0 * sigma2
+    )
 
     # Bisection to invert mixture CDF
     def bisect(i, bounds):
@@ -126,18 +155,19 @@ def DistDoubleGaussian(key, theta, correlation):
 
         cdf_mid = mixture_cdf(mid)
 
-        return jax.lax.cond(
-            cdf_mid < u,
-            lambda _: (mid, hi),
-            lambda _: (lo, mid),
-            operand=None
-        )
+        new_lo = jnp.where(cdf_mid < u, mid, lo)
+        new_hi = jnp.where(cdf_mid < u, hi, mid)
+
+        return new_lo, new_hi
 
     lower, upper = jax.lax.fori_loop(
         0, 100, bisect, (lower, upper)
     )
 
-    return ((lower + upper) / 2.0).squeeze()
+    x = (lower + upper) / 2.0
+
+    return x.squeeze()
+
 
 def DistLogistic(key, theta, correlation):
     """

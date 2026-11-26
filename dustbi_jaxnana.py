@@ -172,7 +172,7 @@ def assign_samplers(infos):
             split_type = infos['Splits'][parameter][0]
 
             if split_type == 'Stepwise':
-                print(f"Assigning {parameter} as a split function with {infos['Splits'][parameter][1]} at {infos['Splits'][parameter][2]}")
+                print(f"Assigning {parameter} as a split function with {infos['Splits'][parameter][1]} at {infos['Splits'][parameter][2]}, with {infos['Functions'][parameter].__name__}")
 
                 correlated_parameter = infos['Splits'][parameter][1]
                 correlated_value = infos['Splits'][parameter][2]
@@ -185,12 +185,12 @@ def assign_samplers(infos):
                 raise NotImplementedError(f"Split type {split_type} not implemented")
 
         elif parameter in infos['Correlations'].keys():
-                print(f"Assigning {parameter} to correlate with {infos['Correlations'][parameter]}")
+                print(f"Assigning {parameter} to correlate with {infos['Correlations'][parameter]} as {infos['Functions'][parameter].__name__}")
                 conditionals[parameter] = jax.jit(_extract_correlation(infos['Functions'][parameter], infos['Correlations'][parameter]))
         
 
         else:
-            print(f"Assigning {parameter}")
+            print(f"Assigning {parameter} as {infos['Functions'][parameter].__name__}")
             directs[parameter] = jax.jit(infos['Functions'][parameter])
 
     return conditionals, directs
